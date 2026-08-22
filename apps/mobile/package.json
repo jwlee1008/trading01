@@ -1,0 +1,74 @@
+{
+  "name": "@signal/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "predev": "pnpm --filter @signal/api-client build",
+    "dev": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start",
+    "dev:workspace": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start",
+    "prestart": "pnpm --filter @signal/api-client build",
+    "start": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start",
+    "preandroid": "pnpm --filter @signal/api-client build",
+    "android": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start --android",
+    "preios": "pnpm --filter @signal/api-client build",
+    "ios": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start --ios",
+    "preweb": "pnpm --filter @signal/api-client build",
+    "web": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint app src --max-warnings=0",
+    "test": "jest --watch",
+    "test:run": "jest --runInBand"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "57.0.10",
+    "@expo/vector-icons": "15.1.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "2.112.3",
+    "@react-native/assets-registry": "0.86.2",
+    "@signal/api-client": "workspace:*",
+    "@signal/config": "workspace:*",
+    "@signal/ui": "workspace:*",
+    "@tanstack/react-query": "5.101.4",
+    "expo": "57.0.13",
+    "expo-constants": "57.0.11",
+    "expo-linking": "57.0.6",
+    "expo-notifications": "~57.0.11",
+    "expo-router": "57.0.13",
+    "expo-status-bar": "57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-screens": "4.26.0",
+    "react-native-url-polyfill": "4.0.0",
+    "react-native-worklets": "0.10.1",
+    "react-native-web": "0.21.2",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@testing-library/react-native": "14.0.1",
+    "@types/jest": "29.5.14",
+    "@types/react": "19.2.18",
+    "babel-preset-expo": "57.0.7",
+    "jest-expo": "57.0.4",
+    "react-test-renderer": "19.2.3",
+    "typescript": "6.0.3"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.ts"
+    ],
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^@signal/api-client$": "<rootDir>/../../packages/api-client/src/index.ts",
+      "^@signal/config$": "<rootDir>/../../packages/config/src/index.ts",
+      "^@signal/ui$": "<rootDir>/../../packages/ui/src/index.tsx"
+    },
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/e2e/"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <bytecodeTargetLevel>
+      <module name="com.signallab.signallab-spring" target="21" />
+      <module name="com.signallab.signallab-spring.main" target="21" />
+      <module name="com.signallab.signallab-spring.signal-api" target="21" />
+      <module name="com.signallab.signallab-spring.signal-api.main" target="21" />
+      <module name="com.signallab.signallab-spring.signal-api.test" target="21" />
+      <module name="com.signallab.signallab-spring.signal-domain" target="21" />
+      <module name="com.signallab.signallab-spring.signal-domain.main" target="21" />
+      <module name="com.signallab.signallab-spring.signal-domain.test" target="21" />
+      <module name="com.signallab.signallab-spring.signal-worker" target="21" />
+      <module name="com.signallab.signallab-spring.signal-worker.main" target="21" />
+      <module name="com.signallab.signallab-spring.signal-worker.test" target="21" />
+      <module name="com.signallab.signallab-spring.test" target="21" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="com.signallab.signallab-spring.signal-api" options="-parameters" />
+      <module name="com.signallab.signallab-spring.signal-api.main" options="-parameters" />
+      <module name="com.signallab.signallab-spring.signal-api.test" options="-parameters" />
+      <module name="com.signallab.signallab-spring.signal-worker" options="-parameters" />
+      <module name="com.signallab.signallab-spring.signal-worker.main" options="-parameters" />
+      <module name="com.signallab.signallab-spring.signal-worker.test" options="-parameters" />
+      <module name="signallab-spring.signal-api" options="-parameters" />
+      <module name="signallab-spring.signal-api.main" options="-parameters" />
+      <module name="signallab-spring.signal-api.test" options="-parameters" />
+      <module name="signallab-spring.signal-worker" options="-parameters" />
+      <module name="signallab-spring.signal-worker.main" options="-parameters" />
+      <module name="signallab-spring.signal-worker.test" options="-parameters" />
+    </option>
+  </component>
+</project>

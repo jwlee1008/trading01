@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "시그널랩",
+    "slug": "signal-lab",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "signallab",
+    "plugins": ["expo-router", "expo-notifications"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.signallab.mobile"
+    },
+    "android": {
+      "package": "app.signallab.mobile"
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

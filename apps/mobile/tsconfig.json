@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "customConditions": [
+      "react-native-legacy-deep-imports"
+    ],
+    "types": [
+      "jest"
+    ],
+    "noEmit": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@signal/config": [
+        "../../packages/config/src/index.ts"
+      ],
+      "@signal/ui": [
+        "../../packages/ui/src/index.tsx"
+      ]
+    }
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "jest.setup.ts"
+  ]
+}

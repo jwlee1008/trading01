@@ -1,0 +1,52 @@
+{
+  "name": "stock-signal-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm build:packages && powershell -ExecutionPolicy Bypass -File apps/backend/run-dev.ps1",
+    "dev:api": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-api.ps1 bootRun",
+    "dev:worker": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 bootRun",
+    "dev:mobile": "pnpm --filter @signal/mobile dev",
+    "worker:import:calendar": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 importCalendar",
+    "worker:import:instruments": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 importInstruments",
+    "worker:refresh:kospi-top10": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 refreshKospiTop10",
+    "worker:backfill:candles": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 backfillCandles",
+    "worker:backfill:kospi-top10": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 backfillKospiTop10",
+    "worker:prepare:demo-top50": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 prepareDemoTop50",
+    "worker:prepare:market-data": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 prepareMarketData",
+    "worker:benchmark": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 benchmark",
+    "build": "pnpm -r --if-present build",
+    "build:packages": "pnpm --filter './packages/**' --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "test:run": "pnpm -r --if-present test:run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test:run",
+    "check:expo": "pnpm --filter @signal/mobile exec expo install --check",
+    "check:peers": "pnpm peers check",
+    "check:audit": "pnpm audit --audit-level=moderate",
+    "check:web": "pnpm --filter @signal/mobile exec expo export --platform web --output-dir dist",
+    "check:release": "pnpm check && pnpm build && pnpm check:expo && pnpm check:peers && pnpm check:web && pnpm check:audit",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "dev:spring-api": "pnpm dev:api",
+    "check:spring-api": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-api.ps1 check",
+    "dev:spring-worker": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 bootRun",
+    "spring-worker:once": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 once",
+    "check:spring-worker": "powershell -ExecutionPolicy Bypass -File apps/backend/run-spring-worker.ps1 check"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.3.0",
+    "eslint": "10.8.1",
+    "supabase": "^2.114.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0"
+  }
+}

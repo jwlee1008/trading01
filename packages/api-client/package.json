@@ -1,0 +1,26 @@
+{
+  "name": "@signal/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "react-native": "./dist/src/index.js",
+      "types": "./src/index.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest --exclude dist/**",
+    "test:run": "vitest run --exclude dist/**"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "vitest": "4.1.10"
+  }
+}
