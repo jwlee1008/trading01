@@ -14,11 +14,6 @@ spring:
       connection-timeout: 5000
 
 signal:
-  auth-mode: ${AUTH_MODE:mock}
-  data-store: ${DATA_STORE:mock}
-  dev-auth-token: ${DEV_AUTH_TOKEN:demo-token}
-  dev-auth-user-id: ${DEV_AUTH_USER_ID:demo-user}
-  dev-auth-token-map: ${DEV_AUTH_TOKEN_MAP:}
   supabase-url: ${SUPABASE_URL:}
   cors-origins: ${API_CORS_ORIGINS:}
   worker-service-token: ${WORKER_SERVICE_TOKEN:}

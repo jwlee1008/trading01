@@ -26,6 +26,6 @@ public class AccountController {
     @DeleteMapping("/me")
     public Map<String, Object> deleteAccount(@CurrentUser String userId) {
         accountService.delete(userId);
-        return ApiEnvelope.ok(Map.of("accepted", true, "deletedAt", Instant.now().toString()), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(Map.of("accepted", true, "deletedAt", Instant.now().toString()), databaseHealthService.isPostgres());
     }
 }

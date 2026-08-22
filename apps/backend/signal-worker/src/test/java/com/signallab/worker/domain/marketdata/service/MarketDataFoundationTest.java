@@ -91,8 +91,7 @@ class MarketDataFoundationTest {
         properties.setMarketDataThrough("2026-08-18");
         properties.setBackfillDryRun(true);
         MarketDataImportService service = new MarketDataImportService(
-            org.mockito.Mockito.mock(JdbcTemplate.class), new KiwoomProviderFactory(new ObjectMapper()),
-            org.mockito.Mockito.mock(DemoTop50DataService.class)
+            org.mockito.Mockito.mock(JdbcTemplate.class), new KiwoomProviderFactory(new ObjectMapper())
         );
         MarketDataImportService.Report report = service.run(properties);
         assertEquals("import-calendar", report.action());

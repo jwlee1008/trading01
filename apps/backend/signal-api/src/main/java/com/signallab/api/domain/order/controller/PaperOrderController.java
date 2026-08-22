@@ -29,17 +29,17 @@ public class PaperOrderController {
 
     @GetMapping
     public Map<String, Object> list(@CurrentUser String userId) {
-        return ApiEnvelope.ok(paperOrderService.findByUserId(parseUserId(userId)), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(paperOrderService.findByUserId(parseUserId(userId)), databaseHealthService.isPostgres());
     }
 
     @PostMapping
     public Map<String, Object> place(@CurrentUser String userId, @Valid @RequestBody PaperOrderRequest request) {
-        return ApiEnvelope.ok(paperOrderService.place(parseUserId(userId), request), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(paperOrderService.place(parseUserId(userId), request), databaseHealthService.isPostgres());
     }
 
     @PostMapping("/{orderId}/cancel")
     public Map<String, Object> cancel(@CurrentUser String userId, @PathVariable UUID orderId) {
-        return ApiEnvelope.ok(paperOrderService.cancel(parseUserId(userId), orderId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(paperOrderService.cancel(parseUserId(userId), orderId), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

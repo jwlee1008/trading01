@@ -3,10 +3,8 @@ package com.signallab.worker.domain.signal.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.signallab.worker.global.config.WorkerProperties;
-import com.signallab.worker.global.config.RuntimeEnvironment;
 import java.math.BigDecimal;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -17,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.springframework.stereotype.Service;
 
 /** Reads finalized D1 strategies and completed DB candles, then persists new BUY transitions. */
@@ -26,21 +25,21 @@ public class PostgresDailySignalCycle {
     private final ObjectMapper objectMapper;
     private final DailyStrategyEvaluator evaluator;
     private final PostgresSignalOutboxWriter signalWriter;
+    private final DataSource dataSource;
 
     public PostgresDailySignalCycle(ObjectMapper objectMapper, DailyStrategyEvaluator evaluator,
-                                    PostgresSignalOutboxWriter signalWriter) {
+                                    PostgresSignalOutboxWriter signalWriter, DataSource dataSource) {
         this.objectMapper = objectMapper;
         this.evaluator = evaluator;
         this.signalWriter = signalWriter;
+        this.dataSource = dataSource;
     }
 
     public CycleReport run(WorkerProperties properties) {
         if (!properties.isEnabled() || !properties.isDailyCycleEnabled()) return new CycleReport(0, 0, 0, "disabled");
-        String databaseUrl = RuntimeEnvironment.get("DATABASE_URL");
-        if (databaseUrl == null || databaseUrl.isBlank()) throw new IllegalStateException("DATABASE_URL is required for the Spring daily cycle");
         LocalDate through = resolveThrough(properties.getExpectedThrough());
         int lookback = bounded(properties.getCandleLookback(), 500, 30, 2_000);
-        try (Connection connection = DriverManager.getConnection(jdbcUrl(databaseUrl))) {
+        try (Connection connection = dataSource.getConnection()) {
             List<StrategyWork> work = loadWork(connection, through);
             int evaluated = 0;
             int signals = 0;
@@ -80,9 +79,9 @@ public class PostgresDailySignalCycle {
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("closePrice", BigDecimal.valueOf(latest.close()));
         List<Map<String, String>> reasons = new ArrayList<>();
-        String dataSource = symbol.startsWith("DEMO") ? "합성 demo 일봉" : "키움 demo 일봉";
-        evidence.put("dataSource", dataSource);
-        reasons.add(Map.of("label", "데이터 출처", "value", dataSource));
+        String sourceLabel = "키움 OpenAPI 일봉";
+        evidence.put("dataSource", sourceLabel);
+        reasons.add(Map.of("label", "데이터 출처", "value", sourceLabel));
         for (int index = 0; index < strategy.rules().size(); index++) {
             String prefix = "rule." + index;
             if (!Boolean.TRUE.equals(result.evidence().get(prefix + ".matched"))) continue;
@@ -223,7 +222,6 @@ public class PostgresDailySignalCycle {
         if (result < minimum || result > maximum) throw new IllegalArgumentException("candleLookback must be between " + minimum + " and " + maximum);
         return result;
     }
-    private static String jdbcUrl(String url) { return url.startsWith("postgresql://") ? "jdbc:" + url : url; }
     private static UUID rowsUncheckedUuid(ResultSet rows, String column) { try { return rows.getObject(column, UUID.class); } catch (Exception error) { throw new IllegalStateException(error); } }
     private static String rowsUncheckedString(ResultSet rows, String column) { try { return rows.getString(column); } catch (Exception error) { throw new IllegalStateException(error); } }
 

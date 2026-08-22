@@ -8,8 +8,8 @@ afterEach(() => {
 describe("SignalApiClient", () => {
   it("reads provider status from its typed public endpoint", async () => {
     const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
-      data: { provider: "mock", state: "CONNECTED", lastCandleAt: null, delayed: false },
-      meta: { requestId: "request-1", generatedAt: "2026-08-15T00:00:00.000Z", mock: true },
+      data: { provider: "kiwoom", state: "CONNECTED", lastCandleAt: null, delayed: false },
+      meta: { requestId: "request-1", generatedAt: "2026-08-15T00:00:00.000Z", dataSource: "postgres" },
     }), { status: 200, headers: { "content-type": "application/json" } }))) as unknown as typeof fetch;
     const result = await new SignalApiClient("http://localhost:3000", fetcher).providerStatus();
     expect(result.data.state).toBe("CONNECTED");
@@ -19,7 +19,7 @@ describe("SignalApiClient", () => {
   it("requests a structured explanation for one signal", async () => {
     const fetcher = responseFetcher({
       data: { signalId: "sig-1", summary: "설명" },
-      meta: { requestId: "request-1", generatedAt: "2026-08-15T00:00:00.000Z", mock: true },
+      meta: { requestId: "request-1", generatedAt: "2026-08-15T00:00:00.000Z", dataSource: "postgres" },
     });
     const result = await new SignalApiClient("http://localhost:3000", fetcher).signalAdvice("sig/1");
     expect(result.data).toMatchObject({ signalId: "sig-1" });
@@ -43,14 +43,14 @@ describe("SignalApiClient", () => {
   it("rejects a malformed success envelope", async () => {
     const fetcher = responseFetcher({
       payload: { ok: true },
-      meta: { requestId: "", generatedAt: "not-a-date", mock: "yes" },
+      meta: { requestId: "", generatedAt: "not-a-date", dataSource: "unknown" },
     });
 
     await expect(new SignalApiClient("http://localhost:3000", fetcher).health()).rejects.toMatchObject({
       name: "ApiError",
       status: 200,
       details: {
-        issues: ["data", "meta.requestId", "meta.generatedAt", "meta.mock"],
+        issues: ["data", "meta.requestId", "meta.generatedAt", "meta.dataSource"],
       },
     });
   });

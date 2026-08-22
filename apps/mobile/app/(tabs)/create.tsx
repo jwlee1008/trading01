@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { AppText, Banner, Button, Chip, Divider, Field, Screen, SectionTitle, Surface, ToggleRow, spacing, useSignalTheme } from '@signal/ui';
+import { AppText, Banner, Button, Chip, Divider, EmptyState, Field, Screen, SectionTitle, Surface, ToggleRow, spacing, useSignalTheme } from '@signal/ui';
 import { Segmented, TitleBlock } from '@/components/common';
-import { indicators, universes } from '@/data/mock';
+import { indicators } from '@/data/catalog';
+import { useUniverses } from '@/hooks/useUniverses';
 import type { IndicatorId } from '@/domain/types';
 import { createRemoteStrategy, loadRemoteUniverseVersions, remoteStrategyRuleLabel, remoteUniverseKind, reviseRemoteStrategy } from '@/services/connected-api';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
@@ -11,13 +13,14 @@ import { useAppStore } from '@/store/useAppStore';
 
 export default function CreateScreen() {
   const { colors } = useSignalTheme();
+  const queryClient = useQueryClient();
   const remoteApiReady = useRemoteApiReady();
   const selectedUniverseId = useAppStore((state) => state.selectedUniverseId);
   const setUniverse = useAppStore((state) => state.setUniverse);
   const strategies = useAppStore((state) => state.strategies);
-  const addStrategy = useAppStore((state) => state.addStrategy);
-  const reviseStrategy = useAppStore((state) => state.reviseStrategy);
   const upsertRemoteStrategy = useAppStore((state) => state.upsertRemoteStrategy);
+  const universeQuery = useUniverses();
+  const universes = universeQuery.data ?? [];
   const params = useLocalSearchParams<{ edit?: string }>();
   const editing = strategies.find((item) => item.id === params.edit && !item.locked);
   const [name, setName] = useState(editing?.name ?? '내 일봉 전략');
@@ -47,7 +50,7 @@ export default function CreateScreen() {
         setUniverseNotice(null);
         return;
       }
-      const fallback = (['demoTop50', 'kospi', 'kosdaq', 'all'] as const).find((id) => availableKinds.has(remoteUniverseKind(id)));
+      const fallback = (['kospi', 'kosdaq', 'all'] as const).find((id) => availableKinds.has(remoteUniverseKind(id)));
       if (fallback) {
         setUniverse(fallback);
         setUniverseNotice('선택한 종목군 데이터가 아직 없어 현재 사용 가능한 범위로 변경했습니다.');
@@ -77,21 +80,17 @@ export default function CreateScreen() {
 
   const save = async () => {
     if (error) return Alert.alert('저장할 수 없어요', error);
+    if (!remoteApiReady) return Alert.alert('로그인이 필요합니다', '실제 전략은 로그인 후 서버에 저장됩니다.');
     const input = { name: name.trim(), universeId: selectedUniverseId, indicatorIds: selected, conditionMode: mode, public: makePublic };
     setSaving(true);
     try {
-      if (remoteApiReady) {
-        if (editing && !editing.remoteStrategyId) throw new Error('서버 전략 동기화를 기다린 뒤 다시 시도하세요.');
-        const strategy = editing
-          ? await reviseRemoteStrategy(editing.remoteStrategyId!, input)
-          : await createRemoteStrategy(input);
-        upsertRemoteStrategy(strategy);
-        router.replace({ pathname: '/strategy/[id]', params: { id: strategy.id } });
-        return;
-      }
-      if (editing) reviseStrategy(editing.id, input);
-      const id = editing?.id ?? addStrategy(input);
-      router.push({ pathname: '/strategy/[id]', params: { id } });
+      if (editing && !editing.remoteStrategyId) throw new Error('서버 전략 동기화를 기다린 뒤 다시 시도하세요.');
+      const strategy = editing
+        ? await reviseRemoteStrategy(editing.remoteStrategyId!, input)
+        : await createRemoteStrategy(input);
+      upsertRemoteStrategy(strategy);
+      void queryClient.invalidateQueries({ queryKey: ['connected-api-snapshot'] });
+      router.push({ pathname: '/strategy/[id]', params: { id: strategy.id, saved: '1' } });
     } catch (caught) {
       Alert.alert('전략 저장 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
     } finally {
@@ -102,10 +101,11 @@ export default function CreateScreen() {
   return (
     <Screen>
       <TitleBlock eyebrow="일봉 · 버전 고정" title={editing ? '새 전략 버전 만들기' : '내 조건 만들기'} body="완성된 일봉에서 false → true로 바뀐 날만 새 신호를 만듭니다." />
+      {!remoteApiReady ? <Banner tone="warning" title="저장하려면 로그인이 필요합니다" body="종목 범위와 지표는 둘러볼 수 있으며, 로그인 후 실제 전략을 서버에 저장합니다." action="로그인" onAction={() => router.push({ pathname: '/auth', params: { origin: 'create' } })} /> : null}
       <Field label="전략 이름" value={name} onChangeText={setName} maxLength={30} {...(!name.trim() ? { error: '이름이 필요해요.' } : {})} />
       <SectionTitle title="1. 종목 범위" />
       {universeNotice ? <Banner tone="warning" title="종목 범위 확인" body={universeNotice} /> : null}
-      <Pressable accessibilityRole="button" onPress={() => router.push('/universe')}>
+      <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/universe', params: { origin: 'create' } })}>
         <Surface style={styles.row}><View style={{ flex: 1, gap: 4 }}><AppText variant="bodyStrong">{selectedUniverse?.name}</AppText><AppText variant="caption" tone="muted">{selectedUniverse?.count.toLocaleString('ko-KR')}종목 · {selectedUniverse?.version}</AppText></View><AppText tone="accent" variant="bodyStrong">바꾸기</AppText></Surface>
       </Pressable>
       <View style={styles.chips}>{universes.slice(0, 3).map((item) => <Chip key={item.id} label={item.name} selected={selectedUniverseId === item.id} onPress={() => setUniverse(item.id)} />)}</View>
@@ -133,10 +133,10 @@ export default function CreateScreen() {
       <ToggleRow title="고급 설정 펼치기" body="파라미터와 알림 cooldown 확인" value={advanced} onValueChange={setAdvanced} />
       {advanced ? <Surface style={{ gap: spacing.md }}><AppText variant="bodyStrong">고급 설정</AppText><AppText tone="muted">선택 지표별 파라미터는 검증 grid 기본값을 씁니다. 신호 cooldown은 종목·전략별 24시간입니다.</AppText><Banner title="파라미터 변경은 새 전략 버전을 만듭니다" /></Surface> : null}
       <ToggleRow title="전략 공개" body="기본값 비공개 · 실제 보유 정보는 공개되지 않음" value={makePublic} onValueChange={setMakePublic} />
-      <Button label={saving ? '저장 중…' : universeChecking ? '종목군 확인 중…' : editing ? `v${editing.version + 1}로 저장` : '전략 저장'} onPress={() => { void save(); }} disabled={Boolean(error) || saving || universeChecking} />
+      <Button label={!remoteApiReady ? '로그인 후 전략 저장' : saving ? '저장 중…' : universeChecking || universeQuery.isPending ? '종목군 확인 중…' : editing ? `v${editing.version + 1}로 저장` : '전략 저장'} onPress={() => { void save(); }} disabled={Boolean(error) || saving || universeChecking || universeQuery.isPending || !remoteApiReady} />
 
       <SectionTitle title={`내 전략 ${strategies.length}개`} />
-      {strategies.map((strategy) => (
+      {strategies.length === 0 ? <EmptyState title="아직 저장한 전략이 없습니다" body="위에서 종목 범위와 지표를 정한 뒤 첫 전략을 저장하세요." /> : strategies.map((strategy) => (
         <Pressable key={strategy.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/strategy/[id]', params: { id: strategy.id } })}>
           <Surface style={styles.row}><View style={{ flex: 1, gap: 4 }}><AppText variant="bodyStrong">{strategy.name}</AppText><AppText variant="caption" tone="muted">v{strategy.version} · {strategy.indicatorIds.length}개 지표 · {strategy.conditionMode}</AppText></View><Chip label={strategy.locked ? '잠김' : strategy.public ? '공개' : '비공개'} tone={strategy.locked ? 'warning' : 'default'} /></Surface>
         </Pressable>

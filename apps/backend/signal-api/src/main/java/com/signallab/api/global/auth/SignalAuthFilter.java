@@ -1,8 +1,5 @@
 package com.signallab.api.global.auth;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.signallab.api.global.config.AuthMode;
 import com.signallab.api.global.config.SignalProperties;
 import com.signallab.api.domain.account.service.AccountService;
 import com.signallab.api.global.web.PublicRouteRegistry;
@@ -12,8 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -32,22 +27,16 @@ public class SignalAuthFilter extends OncePerRequestFilter {
     private final SignalProperties properties;
     private final AccountService accountService;
     private final PublicRouteRegistry publicRoutes;
-    private final Environment environment;
-    private final ObjectMapper objectMapper;
     private JwtDecoder jwtDecoder;
 
     public SignalAuthFilter(
         SignalProperties properties,
         AccountService accountService,
-        PublicRouteRegistry publicRoutes,
-        Environment environment,
-        ObjectMapper objectMapper
+        PublicRouteRegistry publicRoutes
     ) {
         this.properties = properties;
         this.accountService = accountService;
         this.publicRoutes = publicRoutes;
-        this.environment = environment;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -66,18 +55,8 @@ public class SignalAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        AuthMode authMode = properties.resolvedAuthMode();
-        if (isProduction() && authMode != AuthMode.SUPABASE) {
-            writeError(response, HttpStatus.SERVICE_UNAVAILABLE, "운영 환경은 Supabase 인증 모드가 필요합니다.");
-            return;
-        }
-
         try {
-            AuthenticatedUser user = switch (authMode) {
-                case DISABLED -> new AuthenticatedUser(defaultDevUserId());
-                case MOCK -> authenticateMock(request);
-                case SUPABASE -> authenticateSupabase(request);
-            };
+            AuthenticatedUser user = authenticateSupabase(request);
 
             if (accountService.isAccountDeleted(user.userId())) {
                 writeError(response, HttpStatus.GONE, "삭제된 계정입니다.");
@@ -94,34 +73,6 @@ public class SignalAuthFilter extends OncePerRequestFilter {
         } finally {
             SecurityContextHolder.clearContext();
         }
-    }
-
-    private AuthenticatedUser authenticateMock(HttpServletRequest request) throws AuthRejectedException {
-        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw AuthRejectedException.unauthorized("인증 토큰이 필요합니다.");
-        }
-
-        String token = authorization.substring("Bearer ".length()).trim();
-        String expected = properties.getDevAuthToken();
-        if (expected != null && !expected.isBlank() && expected.equals(token)) {
-            return new AuthenticatedUser(defaultDevUserId());
-        }
-
-        String rawMap = properties.getDevAuthTokenMap();
-        if (rawMap != null && !rawMap.isBlank()) {
-            try {
-                Map<String, String> tokenMap = objectMapper.readValue(rawMap, new TypeReference<>() {});
-                String userId = tokenMap.get(token);
-                if (userId != null && !userId.isBlank()) {
-                    return new AuthenticatedUser(userId);
-                }
-            } catch (IOException error) {
-                throw AuthRejectedException.unavailable("DEV_AUTH_TOKEN_MAP 설정이 올바르지 않습니다.");
-            }
-        }
-
-        throw AuthRejectedException.unauthorized("인증 토큰이 올바르지 않습니다.");
     }
 
     private AuthenticatedUser authenticateSupabase(HttpServletRequest request) throws AuthRejectedException {
@@ -166,25 +117,6 @@ public class SignalAuthFilter extends OncePerRequestFilter {
                 .build();
         }
         return jwtDecoder;
-    }
-
-    private String defaultDevUserId() {
-        String userId = properties.getDevAuthUserId();
-        return userId == null || userId.isBlank() ? "demo-user" : userId;
-    }
-
-    private boolean isProduction() {
-        String[] profiles = environment.getActiveProfiles();
-        if (profiles.length > 0) {
-            for (String profile : profiles) {
-                if ("production".equalsIgnoreCase(profile) || "prod".equalsIgnoreCase(profile)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        String nodeEnv = environment.getProperty("NODE_ENV", "development");
-        return "production".equalsIgnoreCase(nodeEnv);
     }
 
     private void writeError(HttpServletResponse response, HttpStatus status, String message) throws IOException {

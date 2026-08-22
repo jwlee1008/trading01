@@ -1,13 +1,9 @@
 package com.signallab.api.domain.alert.service;
 
-import com.signallab.api.global.config.DataStoreMode;
-import com.signallab.api.global.config.SignalProperties;
 import java.sql.Time;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -17,20 +13,13 @@ public class AlertSettingsService {
     private static final Settings DEFAULT_SETTINGS = new Settings(true, false, "22:00", "07:00", false);
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
-    private final SignalProperties properties;
     private final JdbcTemplate jdbcTemplate;
-    private final Map<String, Settings> mockSettings = new ConcurrentHashMap<>();
 
-    public AlertSettingsService(SignalProperties properties, JdbcTemplate jdbcTemplate) {
-        this.properties = properties;
+    public AlertSettingsService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
     public Settings findFor(String userId) {
-        if (properties.resolvedDataStore() == DataStoreMode.MOCK) {
-            return mockSettings.getOrDefault(userId, DEFAULT_SETTINGS);
-        }
-
         UUID id = UUID.fromString(userId);
         return jdbcTemplate.query(
             """
@@ -58,11 +47,6 @@ public class AlertSettingsService {
 
     public Settings update(String userId, Settings input) {
         validate(input);
-        if (properties.resolvedDataStore() == DataStoreMode.MOCK) {
-            mockSettings.put(userId, input);
-            return input;
-        }
-
         UUID id = UUID.fromString(userId);
         Time quietStart = input.quietHoursEnabled() ? Time.valueOf(LocalTime.parse(input.quietStart())) : null;
         Time quietEnd = input.quietHoursEnabled() ? Time.valueOf(LocalTime.parse(input.quietEnd())) : null;

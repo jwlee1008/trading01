@@ -24,8 +24,7 @@ export default function SettingsScreen() {
   const setQuietHours = useAppStore((state) => state.setQuietHoursEnabled);
   const setThemeMode = useAppStore((state) => state.setThemeMode);
   const setNickname = useAppStore((state) => state.setNickname);
-  const setConnectionMode = useAppStore((state) => state.setConnectionMode);
-  const resetDemo = useAppStore((state) => state.resetDemo);
+  const clearSessionData = useAppStore((state) => state.clearSessionData);
   const [nickname, setNicknameDraft] = useState(storeNickname);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingAlerts, setSavingAlerts] = useState(false);
@@ -33,11 +32,8 @@ export default function SettingsScreen() {
   const remoteAccountConnected = connectedApiEnabled && (!supabaseConfigured || auth.session !== null);
 
   const saveProfile = async (next: { nickname: string; profilePublic: boolean; delayedPublic: boolean }) => {
-    if (remoteAccountConnected) {
-      await updateRemoteProfileVisibility({
-        isPublic: next.profilePublic, nickname: next.nickname, discloseOpenPositions: next.delayedPublic,
-      });
-    }
+    if (!remoteAccountConnected) throw new Error('로그인이 필요합니다.');
+    await updateRemoteProfileVisibility({ isPublic: next.profilePublic, nickname: next.nickname, discloseOpenPositions: next.delayedPublic });
     setNickname(next.nickname);
     setProfilePublic(next.profilePublic);
     setDelayedPositionPublic(next.delayedPublic);
@@ -76,11 +72,8 @@ export default function SettingsScreen() {
     }
   };
   const saveAlerts = async (enabled: boolean, quietHoursEnabled: boolean) => {
-    if (remoteAccountConnected) {
-      await updateRemoteAlertSettings({
-        enabled, quietHoursEnabled, quietStart: '22:00', quietEnd: '07:00', showPriceOnLockScreen: false,
-      });
-    }
+    if (!remoteAccountConnected) throw new Error('로그인이 필요합니다.');
+    await updateRemoteAlertSettings({ enabled, quietHoursEnabled, quietStart: '22:00', quietEnd: '07:00', showPriceOnLockScreen: false });
     setNotifications(enabled);
     setQuietHours(quietHoursEnabled);
   };
@@ -114,7 +107,7 @@ export default function SettingsScreen() {
     setSigningOut(true);
     try {
       await auth.signOut();
-      resetDemo();
+      clearSessionData();
       router.replace('/onboarding');
     } catch (caught) {
       Alert.alert('로그아웃 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
@@ -123,18 +116,16 @@ export default function SettingsScreen() {
     }
   };
   const deleteAccount = () => Alert.alert(
-    remoteAccountConnected ? '계정 삭제' : '체험 데이터 삭제',
-    remoteAccountConnected
-      ? '서버 계정과 이 기기 데이터를 삭제합니다. 되돌릴 수 없습니다.'
-      : '전략, 실제 수동 기록, 연습 주문을 이 기기에서 삭제합니다. 되돌릴 수 없습니다.',
+    '계정 삭제',
+    '서버 계정과 이 기기 세션 데이터를 삭제합니다. 되돌릴 수 없습니다.',
     [{ text: '취소', style: 'cancel' }, {
       text: '삭제', style: 'destructive', onPress: () => {
         void (async () => {
           try {
-            if (remoteAccountConnected) await deleteRemoteAccount();
+            if (!remoteAccountConnected) throw new Error('로그인이 필요합니다.');
+            await deleteRemoteAccount();
             if (auth.session) await auth.signOut().catch(() => undefined);
-            resetDemo();
-            if (remoteAccountConnected) setConnectionMode('offline');
+            clearSessionData();
             router.replace('/onboarding');
           } catch (caught) {
             Alert.alert('계정 삭제 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
@@ -164,21 +155,21 @@ export default function SettingsScreen() {
       {!notifications ? <Banner tone="negative" title="알림 권한이 꺼져 있어요" body="신호 기록은 앱 안에 남지만 잠금 화면 알림은 받지 못합니다." /> : null}
 
       <SectionTitle title="데이터 · 개인정보" />
-      <Surface style={{ paddingVertical: 0 }}><ListRow title="데이터 공급자 상태" subtitle="Mock provider · 실제 연결 없음" onPress={() => router.push('/provider-status')} /><Divider /><ListRow title="공개 데이터 범위" subtitle="실제 투자금·이메일·토큰 비공개" onPress={() => router.push({ pathname: '/profile/[id]', params: { id: 'me' } })} /><Divider /><ListRow title="개인정보 처리 · 고지" subtitle="정보·교육 목적 · 투자자문 아님" onPress={() => Alert.alert('필수 고지', '백테스트와 페이퍼 성과는 미래 성과를 보장하지 않습니다. 비용, 데이터 지연, 시장 상황으로 실제 결과가 달라질 수 있습니다.')} /></Surface>
+      <Surface style={{ paddingVertical: 0 }}><ListRow title="데이터 공급자 상태" subtitle="실제 수집 상태 확인" onPress={() => router.push('/provider-status')} /><Divider /><ListRow title="공개 데이터 범위" subtitle="실제 투자금·이메일·토큰 비공개" onPress={() => router.navigate('/(tabs)/rankings')} /><Divider /><ListRow title="개인정보 처리 · 고지" subtitle="정보·교육 목적 · 투자자문 아님" onPress={() => Alert.alert('필수 고지', '백테스트와 페이퍼 성과는 미래 성과를 보장하지 않습니다. 비용, 데이터 지연, 시장 상황으로 실제 결과가 달라질 수 있습니다.')} /></Surface>
 
       <SectionTitle title="계정" />
       {auth.session
         ? <Banner tone="positive" title="Supabase 로그인됨" body={`${auth.user?.email ?? '이메일 없음'} · API 요청에 현재 access token 사용`} />
         : auth.configured
           ? <Banner title="로그인되지 않음" body="서버 동기화 전 로그인하세요." />
-          : <Banner tone="accent" title="로컬 체험 인증" body="Supabase 환경 변수를 넣기 전에는 dev/mock 토큰을 사용합니다." />}
+          : <Banner tone="negative" title="Supabase 설정 필요" body="공개 URL과 publishable key를 설정해야 로그인할 수 있습니다." />}
       {auth.session
         ? <Button label="로그아웃" kind="secondary" busy={signingOut} onPress={() => { void signOut(); }} />
         : auth.configured
           ? <Button label="로그인 · 회원가입" kind="secondary" onPress={() => router.push('/auth')} />
           : null}
-      <Banner title="삭제 전 확인" body={remoteAccountConnected ? '서버 계정과 로컬 데이터를 함께 삭제합니다.' : '서버 계정 연결 전 로컬 체험 데이터만 삭제됩니다.'} />
-      <Button label={remoteAccountConnected ? '계정 · 로컬 데이터 삭제' : '로컬 체험 데이터 삭제'} kind="danger" onPress={deleteAccount} />
+      <Banner title="삭제 전 확인" body="서버 계정과 이 기기 세션 데이터를 함께 삭제합니다." />
+      <Button label="계정 · 세션 데이터 삭제" kind="danger" onPress={deleteAccount} disabled={!remoteAccountConnected} />
       <AppText variant="caption" tone="muted" style={{ textAlign: 'center' }}>{appBrand.name} 0.1.0 · entitlement: FREE_ALL</AppText>
     </Screen>
   );

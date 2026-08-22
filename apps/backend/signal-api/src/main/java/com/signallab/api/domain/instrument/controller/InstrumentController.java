@@ -35,7 +35,7 @@ public class InstrumentController {
 
     @GetMapping("/catalog")
     public Map<String, Object> getCatalog() {
-        return ApiEnvelope.ok(instrumentRepository.findAll(), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(instrumentRepository.findAll(), databaseHealthService.isPostgres());
     }
 
     @GetMapping("/universe-versions")
@@ -54,14 +54,14 @@ public class InstrumentController {
                 rs.getString("id"), rs.getString("kind"), rs.getString("name_ko"),
                 rs.getString("source_revision"), rs.getObject("effective_from").toString(), rs.getInt("member_count")
             ));
-        return ApiEnvelope.ok(versions, databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(versions, databaseHealthService.isPostgres());
     }
 
     @GetMapping("/watchlist")
     public Map<String, Object> getWatchlist(@CurrentUser String userId) {
         return ApiEnvelope.ok(
             instrumentRepository.findByWatchlist(parseUserId(userId)),
-            databaseHealthService.isMockMode()
+            databaseHealthService.isPostgres()
         );
     }
 
@@ -75,7 +75,7 @@ public class InstrumentController {
         instrumentRepository.addToWatchlist(authenticatedUserId, instrument.id());
         return ApiEnvelope.ok(
             instrumentRepository.findByWatchlist(authenticatedUserId),
-            databaseHealthService.isMockMode()
+            databaseHealthService.isPostgres()
         );
     }
 
@@ -90,7 +90,7 @@ public class InstrumentController {
         );
         return ApiEnvelope.ok(
             instrumentRepository.findByWatchlist(authenticatedUserId),
-            databaseHealthService.isMockMode()
+            databaseHealthService.isPostgres()
         );
     }
 

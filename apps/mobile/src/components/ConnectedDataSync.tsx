@@ -11,9 +11,9 @@ export function ConnectedDataSync() {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
   const query = useQuery({
-    queryKey: ['connected-api-snapshot', userId ?? (supabaseConfigured ? 'anonymous' : 'dev')],
+    queryKey: ['connected-api-snapshot', userId ?? 'anonymous'],
     queryFn: () => loadRemoteSnapshot(),
-    enabled: connectedApiEnabled && mode === 'online' && (!supabaseConfigured || userId !== null),
+    enabled: connectedApiEnabled && supabaseConfigured && mode === 'online' && userId !== null,
     refetchInterval: 5_000, retry: false,
   });
   useEffect(() => {

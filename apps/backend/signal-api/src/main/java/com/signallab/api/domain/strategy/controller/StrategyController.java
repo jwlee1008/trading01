@@ -29,12 +29,12 @@ public class StrategyController {
 
     @GetMapping
     public Map<String, Object> list(@CurrentUser String userId) {
-        return ApiEnvelope.ok(strategyService.findByUserId(parseUserId(userId)), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(strategyService.findByUserId(parseUserId(userId)), databaseHealthService.isPostgres());
     }
 
     @PostMapping
     public Map<String, Object> create(@CurrentUser String userId, @Valid @RequestBody StrategyRequest request) {
-        return ApiEnvelope.ok(strategyService.create(parseUserId(userId), request), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(strategyService.create(parseUserId(userId), request), databaseHealthService.isPostgres());
     }
 
     @PostMapping("/{strategyId}/versions")
@@ -43,7 +43,7 @@ public class StrategyController {
         @PathVariable UUID strategyId,
         @Valid @RequestBody StrategyRequest request
     ) {
-        return ApiEnvelope.ok(strategyService.revise(parseUserId(userId), strategyId, request), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(strategyService.revise(parseUserId(userId), strategyId, request), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

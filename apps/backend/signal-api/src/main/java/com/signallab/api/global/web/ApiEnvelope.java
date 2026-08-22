@@ -10,11 +10,11 @@ public final class ApiEnvelope {
     private ApiEnvelope() {
     }
 
-    public static Map<String, Object> ok(Object data, boolean mock) {
+    public static Map<String, Object> ok(Object data, boolean postgres) {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("requestId", UUID.randomUUID().toString());
         meta.put("generatedAt", Instant.now().toString());
-        meta.put("mock", mock);
+        meta.put("dataSource", postgres ? "postgres" : "unavailable");
 
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("data", data);

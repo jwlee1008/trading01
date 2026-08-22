@@ -3,13 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, ListRow, Screen, SectionTitle, Surface, spacing } from '@signal/ui';
 import { TitleBlock } from '@/components/common';
-import { indicators, universes } from '@/data/mock';
+import { indicators } from '@/data/catalog';
+import { useUniverses } from '@/hooks/useUniverses';
 import { remoteStrategyRuleLabel, reviseRemoteStrategy } from '@/services/connected-api';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function StrategyDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, saved } = useLocalSearchParams<{ id: string; saved?: string }>();
   const strategies = useAppStore((state) => state.strategies);
   const strategyHistory = useAppStore((state) => state.strategyHistory);
   const strategy = useMemo(
@@ -23,17 +24,14 @@ export default function StrategyDetailScreen() {
   const history = useMemo(() => strategy?.remoteStrategyId
     ? strategyHistory.filter((item) => item.id !== id && item.remoteStrategyId === strategy.remoteStrategyId)
     : strategyHistory.filter((item) => item.id === id), [id, strategy, strategyHistory]);
-  const togglePublic = useAppStore((state) => state.toggleStrategyPublic);
   const upsertRemoteStrategy = useAppStore((state) => state.upsertRemoteStrategy);
   const remoteApiReady = useRemoteApiReady();
+  const universes = useUniverses().data ?? [];
   const [savingVisibility, setSavingVisibility] = useState(false);
   if (!strategy) return <Screen><EmptyState title="전략을 찾지 못했어요" body="내 전략 목록으로 돌아가세요." action="전략 목록" onAction={() => router.replace('/(tabs)/create')} /></Screen>;
   const universe = universes.find((item) => item.id === strategy.universeId);
   const changeVisibility = async () => {
-    if (!remoteApiReady) {
-      togglePublic(strategy.id);
-      return;
-    }
+    if (!remoteApiReady) return Alert.alert('로그인이 필요합니다', '실제 전략 공개 설정은 로그인 후 변경할 수 있습니다.');
     if (!strategy.remoteStrategyId) return Alert.alert('동기화 대기', '서버 전략을 받은 뒤 다시 시도하세요.');
     setSavingVisibility(true);
     try {
@@ -51,6 +49,7 @@ export default function StrategyDetailScreen() {
   };
   return (
     <Screen>
+      {saved === '1' ? <Banner tone="positive" title="전략을 저장했습니다" body="이 전략은 다음 완성 일봉부터 조건 전환을 평가합니다. 새 신호가 없으면 홈에는 0건으로 표시됩니다." /> : null}
       <TitleBlock eyebrow={`전략 v${strategy.version} · 일봉`} title={strategy.name} body={`${universe?.name} · ${strategy.indicatorIds.length}개 지표를 ${strategy.conditionMode === 'ALL' ? '모두' : '하나 이상'} 충족`} />
       {historical ? <Banner title="이전 전략 버전" body="신호 근거 보존용 읽기 전용 버전입니다." /> : null}
       {strategy.locked ? <Banner title="공식 랭킹 트랙에서 잠김" body="신호 건너뛰기·취소·가격 수정이 불가합니다. 변경하려면 새 트랙과 자격 기간이 필요해요." /> : null}
@@ -66,7 +65,7 @@ export default function StrategyDetailScreen() {
         {strategy.indicatorIds.map((indicatorId, index) => {
           const indicator = indicators.find((item) => item.id === indicatorId);
           if (!indicator) return null;
-          return <React.Fragment key={indicator.id}><ListRow title={`${index + 1}. ${indicator.name}`} subtitle={remoteApiReady ? remoteStrategyRuleLabel(indicator.id) : indicator.defaultRule} value={indicator.tier} onPress={() => router.push({ pathname: '/indicator/[id]', params: { id: indicator.id } })} />{index < strategy.indicatorIds.length - 1 ? <Divider /> : null}</React.Fragment>;
+          return <React.Fragment key={indicator.id}><ListRow title={`${index + 1}. ${indicator.name}`} subtitle={remoteStrategyRuleLabel(indicator.id)} value={indicator.tier} onPress={() => router.push({ pathname: '/indicator/[id]', params: { id: indicator.id } })} />{index < strategy.indicatorIds.length - 1 ? <Divider /> : null}</React.Fragment>;
         })}
       </Surface>
       {!strategy.locked && !historical ? <><Button label="새 버전으로 수정" onPress={() => router.push({ pathname: '/(tabs)/create', params: { edit: strategy.id } })} /><Button label={savingVisibility ? '저장 중…' : strategy.public ? '비공개로 전환' : '공개로 전환'} kind="secondary" disabled={savingVisibility} onPress={() => Alert.alert('새 전략 버전', `공개 설정을 바꾸면 v${strategy.version + 1}이 생성됩니다.`, [{ text: '취소', style: 'cancel' }, { text: '확인', onPress: () => { void changeVisibility(); } }])} /></> : null}

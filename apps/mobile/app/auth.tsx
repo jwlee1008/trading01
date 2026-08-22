@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Field, LoadingState, Screen, Surface, spacing, useSignalTheme } from '@signal/ui';
-import { APP_NAME } from '@/data/mock';
+import { APP_NAME } from '@/data/catalog';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAppStore } from '@/store/useAppStore';
 
 type AuthMode = 'sign-in' | 'sign-up';
 
 export default function AuthScreen() {
+  const { origin } = useLocalSearchParams<{ origin?: string }>();
   const { colors } = useSignalTheme();
   const auth = useAuth();
   const hasSeenOnboarding = useAppStore((state) => state.hasSeenOnboarding);
@@ -26,13 +27,15 @@ export default function AuthScreen() {
   }
 
   const finish = () => {
-    completeOnboarding(false);
-    router.replace(hasSeenOnboarding ? '/(tabs)/my' : '/universe');
+    completeOnboarding();
+    if (origin === 'create' && router.canGoBack()) return router.back();
+    router.replace(hasSeenOnboarding ? '/(tabs)/my' : { pathname: '/universe', params: { origin: 'setup' } });
   };
   const useTrial = () => {
+    if (origin === 'create' && router.canGoBack()) return router.back();
     if (hasSeenOnboarding) return router.replace('/(tabs)/my');
-    completeOnboarding(true);
-    router.replace('/universe');
+    completeOnboarding();
+    router.replace({ pathname: '/universe', params: { origin: 'setup' } });
   };
   const submit = async () => {
     setError(null);
@@ -73,7 +76,7 @@ export default function AuthScreen() {
         <AppText variant="hero">{mode === 'sign-in' ? '로그인' : '회원가입'}</AppText>
         <AppText tone="muted">전략·신호·포트폴리오를 계정에 안전하게 연결합니다.</AppText>
       </View>
-      {!auth.configured ? <Banner tone="negative" title="Supabase 환경 변수 없음" body="지금은 로컬 체험만 가능합니다. 공개 URL과 publishable key를 설정하세요." /> : null}
+      {!auth.configured ? <Banner tone="negative" title="Supabase 환경 변수 없음" body="로그인과 데이터 저장을 사용할 수 없습니다. 공개 URL과 publishable key를 설정하세요." /> : null}
       {auth.initializationError ? <Banner tone="negative" title="세션 확인 실패" body={auth.initializationError} /> : null}
       {message ? <Banner tone="positive" title="회원가입 접수" body={message} /> : null}
       {error ? <Banner tone="negative" title="인증 실패" body={error} /> : null}
@@ -89,7 +92,7 @@ export default function AuthScreen() {
           onPress={() => { setMode((value) => value === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setMessage(null); }}
         />
       </Surface>
-      <Button label={hasSeenOnboarding ? '내 화면으로 돌아가기' : '로컬 체험으로 계속'} kind="secondary" disabled={busy} onPress={useTrial} />
+      <Button label={hasSeenOnboarding ? '내 화면으로 돌아가기' : '저장 없이 둘러보기'} kind="secondary" disabled={busy} onPress={useTrial} />
       <AppText variant="caption" tone="muted" style={styles.notice}>세션 저장과 갱신은 Supabase SDK가 맡습니다. service-role key는 앱에 넣지 않습니다.</AppText>
     </Screen>
   );

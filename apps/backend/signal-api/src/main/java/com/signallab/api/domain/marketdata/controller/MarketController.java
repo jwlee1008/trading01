@@ -1,7 +1,6 @@
 package com.signallab.api.domain.marketdata.controller;
 
 import com.signallab.api.domain.marketdata.service.MarketQueryService;
-import com.signallab.api.domain.marketdata.service.DemoTop50AdminService;
 import com.signallab.api.global.health.service.DatabaseHealthService;
 import com.signallab.api.global.web.ApiEnvelope;
 import java.time.LocalDate;
@@ -22,29 +21,17 @@ import org.springframework.web.server.ResponseStatusException;
 public class MarketController {
     private final MarketQueryService marketQueryService;
     private final DatabaseHealthService databaseHealthService;
-    private final DemoTop50AdminService demoTop50AdminService;
 
-    public MarketController(MarketQueryService marketQueryService, DatabaseHealthService databaseHealthService, DemoTop50AdminService demoTop50AdminService) {
+    public MarketController(MarketQueryService marketQueryService, DatabaseHealthService databaseHealthService) {
         this.marketQueryService = marketQueryService;
         this.databaseHealthService = databaseHealthService;
-        this.demoTop50AdminService = demoTop50AdminService;
-    }
-
-    @GetMapping("/demo-top50")
-    public Map<String, Object> demoTop50() {
-        return ApiEnvelope.ok(demoTop50AdminService.list(), databaseHealthService.isMockMode());
-    }
-
-    @PutMapping("/demo-top50/{symbol}")
-    public Map<String, Object> updateDemoTop50(@PathVariable String symbol, @RequestBody DemoTop50AdminService.UpdateRequest request) {
-        return ApiEnvelope.ok(demoTop50AdminService.update(symbol, request), databaseHealthService.isMockMode());
     }
 
     @GetMapping("/kospi/top10")
     public Map<String, Object> top10(
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf
     ) {
-        return ApiEnvelope.ok(marketQueryService.kospiTop10(asOf), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(marketQueryService.kospiTop10(asOf), databaseHealthService.isPostgres());
     }
 
     @GetMapping("/instruments/{symbol}/daily-prices")
@@ -58,6 +45,6 @@ public class MarketController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "조회 기간은 최대 370일이며 시작일이 종료일보다 늦을 수 없습니다.");
         MarketQueryService.DailyPriceResponse response = marketQueryService.dailyPrices(symbol, from, to);
         if (response == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "종목을 찾을 수 없습니다.");
-        return ApiEnvelope.ok(response, databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(response, databaseHealthService.isPostgres());
     }
 }

@@ -25,11 +25,11 @@ public class AlertSettingsController {
 
     @GetMapping("/alert-settings")
     public Map<String, Object> settings(@CurrentUser String userId) {
-        return ApiEnvelope.ok(alertSettingsService.findFor(userId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(alertSettingsService.findFor(userId), databaseHealthService.isPostgres());
     }
 
     @PutMapping("/alert-settings")
     public Map<String, Object> updateSettings(@CurrentUser String userId, @RequestBody AlertSettingsService.Settings input) {
-        return ApiEnvelope.ok(alertSettingsService.update(userId, input), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(alertSettingsService.update(userId, input), databaseHealthService.isPostgres());
     }
 }

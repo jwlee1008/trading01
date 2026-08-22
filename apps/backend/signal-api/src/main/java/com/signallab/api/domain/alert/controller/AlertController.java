@@ -23,6 +23,6 @@ public class AlertController {
 
     @GetMapping("/alerts")
     public Map<String, Object> alerts(@CurrentUser String userId) {
-        return ApiEnvelope.ok(alertService.findFor(userId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(alertService.findFor(userId), databaseHealthService.isPostgres());
     }
 }

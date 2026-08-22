@@ -4,5 +4,5 @@ import { supabaseConfigured } from '@/services/supabase';
 
 export function useRemoteApiReady(): boolean {
   const { session } = useAuth();
-  return connectedApiEnabled && (!supabaseConfigured || session !== null);
+  return connectedApiEnabled && supabaseConfigured && session !== null;
 }

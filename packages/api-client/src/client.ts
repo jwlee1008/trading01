@@ -10,11 +10,11 @@ import type {
 
 export interface ApiEnvelope<T> {
   data: T;
-  meta: { requestId: string; generatedAt: string; mock: boolean };
+  meta: { requestId: string; generatedAt: string; dataSource: "postgres" | "unavailable" };
 }
 
 export interface ProviderStatus {
-  provider: "mock";
+  provider: string;
   state: "CONNECTED" | "DEGRADED" | "DISCONNECTED";
   lastCandleAt: string | null;
   delayed: boolean;
@@ -216,7 +216,9 @@ function envelopeIssues(body: unknown): string[] {
   if (typeof generatedAt !== "string" || !isValidDateTime(generatedAt)) {
     issues.push("meta.generatedAt");
   }
-  if (typeof meta["mock"] !== "boolean") issues.push("meta.mock");
+  if (meta["dataSource"] !== "postgres" && meta["dataSource"] !== "unavailable") {
+    issues.push("meta.dataSource");
+  }
   return issues;
 }
 

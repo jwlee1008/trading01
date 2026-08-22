@@ -7,6 +7,9 @@ import com.signallab.worker.domain.signal.service.PostgresDailySignalCycle;
 import com.signallab.worker.domain.signal.service.PostgresSellSignalCycle;
 import com.signallab.worker.domain.marketdata.service.MarketDataImportService;
 import com.signallab.worker.global.config.WorkerProperties;
+import com.signallab.worker.global.runtime.WorkerTaskRunner;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,8 +22,9 @@ final class WorkerScheduler {
     private final PostgresSellSignalCycle sellSignalCycle;
     private final PostgresPaperOrderProcessor paperOrderProcessor;
     private final MarketDataImportService marketDataImportService;
+    private final WorkerTaskRunner taskRunner;
 
-    WorkerScheduler(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService) {
+    WorkerScheduler(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner) {
         this.properties = properties;
         this.outboxDispatcher = outboxDispatcher;
         this.dailySignalCycle = dailySignalCycle;
@@ -28,16 +32,18 @@ final class WorkerScheduler {
         this.sellSignalCycle = sellSignalCycle;
         this.paperOrderProcessor = paperOrderProcessor;
         this.marketDataImportService = marketDataImportService;
+        this.taskRunner = taskRunner;
     }
 
     @Scheduled(cron = "${signal.worker.outbox-cron:0 */1 * * * *}", zone = "Asia/Seoul")
     synchronized void dispatchOutbox() {
         if (properties.isEnabled()) {
-            System.out.println(dailySignalCycle.run(properties));
-            System.out.println(rankedBuyCycle.run(properties));
-            System.out.println(sellSignalCycle.run(properties));
-            System.out.println(paperOrderProcessor.process(properties));
-            System.out.println(outboxDispatcher.dispatch(properties));
+            String runKey = Instant.now().truncatedTo(ChronoUnit.MINUTES).toString();
+            taskRunner.run("signal", runKey, () -> dailySignalCycle.run(properties));
+            taskRunner.run("ranking", runKey, () -> rankedBuyCycle.run(properties));
+            taskRunner.run("sell-signal", runKey, () -> sellSignalCycle.run(properties));
+            taskRunner.run("paper-fill", runKey, () -> paperOrderProcessor.process(properties));
+            taskRunner.run("notification", runKey, () -> outboxDispatcher.dispatch(properties));
         }
     }
 
@@ -45,11 +51,8 @@ final class WorkerScheduler {
         fixedDelayString = "${signal.worker.market-data-auto-interval-ms:300000}")
     synchronized void refreshMarketData() {
         if (properties.isEnabled() && properties.isMarketDataAutoEnabled()) {
-            try {
-                System.out.println(marketDataImportService.automaticTop10Refresh(properties));
-            } catch (RuntimeException error) {
-                System.err.println("automatic-market-data-refresh failed: " + error.getMessage());
-            }
+            String runKey = Instant.now().truncatedTo(ChronoUnit.MINUTES).toString();
+            taskRunner.run("market-data", runKey, () -> marketDataImportService.automaticTop10Refresh(properties));
         }
     }
 }

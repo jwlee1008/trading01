@@ -31,8 +31,8 @@ public class WorkerProperties {
     private String kiwoomMode = "real";
     private String kiwoomAppKey = "";
     private String kiwoomAppSecret = "";
-    private String kiwoomMockAppKey = "";
-    private String kiwoomMockAppSecret = "";
+    private String kiwoomDemoAppKey = "";
+    private String kiwoomDemoAppSecret = "";
     private int kiwoomMaxPages = 30;
     private int backfillChunkDays = 180;
     private int backfillMaxRetries = 3;
@@ -43,10 +43,8 @@ public class WorkerProperties {
     private String universeSourceRevision = "";
     private String top100AsOf = "";
     private String backfillUniverseKind = "";
-    private boolean demoTop50Enabled;
-    private int demoTop50RealCount = 10;
-    private int demoTop50SyntheticCount = 40;
-    private long demoTop50Seed = 20260822L;
+    private int taskMaxRetries = 3;
+    private int taskRetryDelayMs = 500;
 
     public boolean isOnce() { return once; }
     public void setOnce(boolean once) { this.once = once; }
@@ -100,10 +98,10 @@ public class WorkerProperties {
     public void setKiwoomAppKey(String value) { this.kiwoomAppKey = value; }
     public String getKiwoomAppSecret() { return kiwoomAppSecret; }
     public void setKiwoomAppSecret(String value) { this.kiwoomAppSecret = value; }
-    public String getKiwoomMockAppKey() { return kiwoomMockAppKey; }
-    public void setKiwoomMockAppKey(String value) { this.kiwoomMockAppKey = value; }
-    public String getKiwoomMockAppSecret() { return kiwoomMockAppSecret; }
-    public void setKiwoomMockAppSecret(String value) { this.kiwoomMockAppSecret = value; }
+    public String getKiwoomDemoAppKey() { return kiwoomDemoAppKey; }
+    public void setKiwoomDemoAppKey(String value) { this.kiwoomDemoAppKey = value; }
+    public String getKiwoomDemoAppSecret() { return kiwoomDemoAppSecret; }
+    public void setKiwoomDemoAppSecret(String value) { this.kiwoomDemoAppSecret = value; }
     public int getKiwoomMaxPages() { return kiwoomMaxPages; }
     public void setKiwoomMaxPages(int value) { this.kiwoomMaxPages = value; }
     public int getBackfillChunkDays() { return backfillChunkDays; }
@@ -124,12 +122,8 @@ public class WorkerProperties {
     public void setTop100AsOf(String value) { this.top100AsOf = value; }
     public String getBackfillUniverseKind() { return backfillUniverseKind; }
     public void setBackfillUniverseKind(String value) { this.backfillUniverseKind = value; }
-    public boolean isDemoTop50Enabled() { return demoTop50Enabled; }
-    public void setDemoTop50Enabled(boolean value) { this.demoTop50Enabled = value; }
-    public int getDemoTop50RealCount() { return demoTop50RealCount; }
-    public void setDemoTop50RealCount(int value) { this.demoTop50RealCount = value; }
-    public int getDemoTop50SyntheticCount() { return demoTop50SyntheticCount; }
-    public void setDemoTop50SyntheticCount(int value) { this.demoTop50SyntheticCount = value; }
-    public long getDemoTop50Seed() { return demoTop50Seed; }
-    public void setDemoTop50Seed(long value) { this.demoTop50Seed = value; }
+    public int getTaskMaxRetries() { return taskMaxRetries; }
+    public void setTaskMaxRetries(int value) { this.taskMaxRetries = value; }
+    public int getTaskRetryDelayMs() { return taskRetryDelayMs; }
+    public void setTaskRetryDelayMs(int value) { this.taskRetryDelayMs = value; }
 }

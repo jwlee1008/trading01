@@ -1,5 +1,5 @@
 import type { RemoteSnapshot } from '@/domain/remote';
-import type { AppAlert, BuySignal, IndicatorId, PaperOrder, PortfolioKind, Position, SellRule, SignalAdvice, Strategy, UniverseId } from '@/domain/types';
+import type { AppAlert, CombinationRank, IndicatorId, PaperOrder, PortfolioKind, Position, SellRule, SignalAdvice, Strategy, UniverseId, UserRank } from '@/domain/types';
 import { getApiAccessToken, refreshApiAccessToken, supabaseConfigured } from '@/services/supabase';
 
 type JsonRecord = Record<string, unknown>;
@@ -33,6 +33,7 @@ export interface RemoteRequestOptions {
   baseUrl?: string;
   accessToken?: string | null;
   timeoutMs?: number;
+  auth?: 'required' | 'none';
 }
 
 export interface RemoteStrategyInput {
@@ -48,31 +49,42 @@ export interface RemoteUniverseVersion {
   kind: string;
   name: string;
   memberCount: number;
+  effectiveFrom: string;
 }
 
-export type DemoScenario = 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS' | 'VOLATILE' | 'REVERSAL';
-export type IndicatorTestPattern = 'NONE' | 'RSI_ONLY' | 'EMA_ONLY' | 'BOLLINGER_ONLY' | 'RSI_EMA' | 'RSI_BOLLINGER' | 'EMA_BOLLINGER' | 'RSI_EMA_BOLLINGER';
-
-export interface DemoTop50Instrument {
-  symbol: string; name: string; source: 'PROVIDER' | 'SYNTHETIC'; editable: boolean; scenario: DemoScenario | '';
-  basePrice: number; trendPerDay: number; volatilityPct: number; baseVolume: number; testPattern: IndicatorTestPattern; candleCount: number;
-  firstDate: string; lastDate: string; latestOpen: number; latestHigh: number; latestLow: number;
-  latestClose: number; latestVolume: number; provider: string;
+export interface RemoteInstrument {
+  symbol: string;
+  name: string;
+  market: string;
+  tradeSuspended: boolean;
 }
 
-export interface DemoTop50Settings {
-  name: string; scenario: DemoScenario; basePrice: number; trendPerDay: number; volatilityPct: number; baseVolume: number; testPattern: IndicatorTestPattern;
+export interface RemoteProviderHealth {
+  provider: string;
+  state: 'CONNECTED' | 'DEGRADED' | 'DISCONNECTED';
+  lastCandleAt: string | null;
+  delayed: boolean;
+}
+
+export interface RemoteRankings {
+  period: '3M' | '6M' | '1Y';
+  combinations: CombinationRank[];
+  indicatorTiers: Array<{ indicatorId: IndicatorId; name: string; tier: string; score: number }>;
+  users: UserRank[];
+  disclosure: string;
+  indicatorDisclosure: string;
 }
 
 async function request(path: string, init?: RequestInit, options: RemoteRequestOptions = {}): Promise<unknown> {
   const baseUrl = options.baseUrl ?? configuredUrl;
   if (!baseUrl) throw new Error('API URL이 설정되지 않았습니다.');
   const fetcher = options.fetcher ?? fetch;
+  const authMode = options.auth ?? 'required';
   const explicitAccessToken = Object.prototype.hasOwnProperty.call(options, 'accessToken');
-  let accessToken = explicitAccessToken
+  let accessToken = authMode === 'none' ? null : explicitAccessToken
     ? options.accessToken ?? null
     : await getApiAccessToken();
-  if (supabaseConfigured && !accessToken) throw new Error('로그인이 필요합니다.');
+  if (authMode === 'required' && !accessToken) throw new Error('로그인이 필요합니다.');
   const headers = new Headers(init?.headers);
   headers.set('content-type', 'application/json');
   if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
@@ -86,7 +98,7 @@ async function request(path: string, init?: RequestInit, options: RemoteRequestO
       headers,
     });
     let response = await send();
-    if (response.status === 401 && supabaseConfigured && !explicitAccessToken) {
+    if (response.status === 401 && authMode === 'required' && supabaseConfigured && !explicitAccessToken) {
       accessToken = await refreshApiAccessToken();
       if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
       response = await send();
@@ -101,7 +113,7 @@ async function request(path: string, init?: RequestInit, options: RemoteRequestO
     return envelope['data'];
   } catch (caught) {
     if (caught instanceof Error && (caught.name === 'AbortError' || caught.message.toLowerCase().includes('aborted'))) {
-      throw new Error('AI 응답 시간이 길어 요청이 종료되었습니다. 잠시 후 다시 시도해 주세요.');
+      throw new Error('AI 응답 시간이 길어 요청이 종료되었습니다. 잠시 후 다시 시도해 주세요.', { cause: caught });
     }
     throw caught;
   } finally {
@@ -119,7 +131,7 @@ function indicatorId(value: unknown): IndicatorId | null {
 
 function universeId(value: unknown): UniverseId {
   const key = text(value).toLowerCase();
-  if (key.includes('demo-top50') || key.includes('demo_top_50')) return 'demoTop50';
+  if (key.includes('kospi_top_10') || key.includes('kospi-top-10') || key.includes('kospitop10')) return 'kospiTop10';
   if (key.includes('kospi200')) return 'kospi200';
   if (key.includes('kosdaq150')) return 'kosdaq150';
   if (key.includes('kosdaq')) return 'kosdaq';
@@ -152,7 +164,7 @@ function strategyFrom(value: unknown): Strategy | null {
   return {
     id, name: text(item['name'], '이름 없는 전략'), version: number(item['version'], 1),
     ...(remoteStrategyId ? { remoteStrategyId } : {}),
-    universeId: universeId(item['universeVersionId']), indicatorIds: [...new Set(ids)],
+    universeId: universeId(item['universeKind'] ?? item['universeVersionId']), indicatorIds: [...new Set(ids)],
     conditionMode: item['logic'] === 'OR' ? 'ANY' : 'ALL', alertEnabled: item['alertsEnabled'] !== false,
     cooldownHours: 24, public: item['isPublic'] === true, locked: item['locked'] === true,
     createdAt: text(item['createdAt'], new Date(0).toISOString()),
@@ -286,8 +298,7 @@ export function remoteIdempotencyKey(prefix: string): string {
 }
 
 const remoteUniverseKinds: Record<UniverseId, string> = {
-  demoTop50: 'DEMO_TOP_50',
-  kospi200: 'KOSPI_200', kosdaq150: 'KOSDAQ_150', kospi: 'KOSPI_ALL',
+  kospi200: 'KOSPI_200', kosdaq150: 'KOSDAQ_150', kospiTop10: 'KOSPI_TOP_10', kospi: 'KOSPI_ALL',
   kosdaq: 'KOSDAQ_ALL', all: 'KR_ALL', custom: 'CUSTOM',
 };
 
@@ -365,44 +376,63 @@ async function resolveRemoteUniverseVersionId(input: RemoteStrategyInput, option
 }
 
 export async function loadRemoteUniverseVersions(options?: RemoteRequestOptions): Promise<RemoteUniverseVersion[]> {
-  return array(await request('/v1/universe-versions', undefined, options)).map(record).flatMap((item) => {
+  return array(await request('/v1/universe-versions', undefined, { ...options, auth: 'none' })).map(record).flatMap((item) => {
     const id = text(item?.['id']);
     const kind = text(item?.['kind']);
     if (!id || !kind) return [];
-    return [{ id, kind, name: text(item?.['name']), memberCount: number(item?.['memberCount']) }];
+    return [{ id, kind, name: text(item?.['name']), memberCount: number(item?.['memberCount']), effectiveFrom: text(item?.['effectiveFrom']) }];
   });
-}
-
-function demoTop50From(value: unknown): DemoTop50Instrument | null {
-  const item = record(value);
-  const symbol = text(item?.['symbol']);
-  if (!item || !symbol) return null;
-  return {
-    symbol, name: text(item['name']), source: item['source'] === 'SYNTHETIC' ? 'SYNTHETIC' : 'PROVIDER',
-    editable: item['editable'] === true, scenario: text(item['scenario']) as DemoScenario | '',
-    basePrice: number(item['basePrice']), trendPerDay: number(item['trendPerDay']), volatilityPct: number(item['volatilityPct']),
-    baseVolume: number(item['baseVolume']), testPattern: text(item['testPattern'], 'NONE') as IndicatorTestPattern,
-    candleCount: number(item['candleCount']), firstDate: text(item['firstDate']),
-    lastDate: text(item['lastDate']), latestOpen: number(item['latestOpen']), latestHigh: number(item['latestHigh']),
-    latestLow: number(item['latestLow']), latestClose: number(item['latestClose']), latestVolume: number(item['latestVolume']),
-    provider: text(item['provider']),
-  };
-}
-
-export async function loadRemoteDemoTop50(options?: RemoteRequestOptions): Promise<DemoTop50Instrument[]> {
-  return array(await request('/v1/market/demo-top50', undefined, options)).map(demoTop50From).filter((item): item is DemoTop50Instrument => item !== null);
-}
-
-export async function updateRemoteDemoTop50(symbol: string, input: DemoTop50Settings, options?: RemoteRequestOptions): Promise<DemoTop50Instrument> {
-  const result = demoTop50From(await request(`/v1/market/demo-top50/${encodeURIComponent(symbol)}`, {
-    method: 'PUT', body: JSON.stringify(input),
-  }, options));
-  if (!result) throw new Error('데모 종목 저장 응답이 올바르지 않습니다.');
-  return result;
 }
 
 export function remoteUniverseKind(id: UniverseId): string {
   return remoteUniverseKinds[id];
+}
+
+function instrumentFrom(value: unknown): RemoteInstrument | null {
+  const item = record(value);
+  const symbol = text(item?.['symbol']);
+  if (!item || !symbol) return null;
+  return { symbol, name: text(item['nameKo'], symbol), market: text(item['market']), tradeSuspended: item['tradeSuspended'] === true };
+}
+
+export async function loadRemoteCatalog(options?: RemoteRequestOptions): Promise<RemoteInstrument[]> {
+  return array(await request('/v1/catalog', undefined, { ...options, auth: 'none' })).map(instrumentFrom).filter((item): item is RemoteInstrument => item !== null);
+}
+
+export async function loadRemoteWatchlist(options?: RemoteRequestOptions): Promise<RemoteInstrument[]> {
+  return array(await request('/v1/watchlist', undefined, options)).map(instrumentFrom).filter((item): item is RemoteInstrument => item !== null);
+}
+
+export async function setRemoteWatchlist(symbol: string, enabled: boolean, options?: RemoteRequestOptions): Promise<RemoteInstrument[]> {
+  const result = await request(`/v1/watchlist/${encodeURIComponent(symbol)}`, { method: enabled ? 'POST' : 'DELETE' }, options);
+  return array(result).map(instrumentFrom).filter((item): item is RemoteInstrument => item !== null);
+}
+
+export async function loadRemoteProviderHealth(options?: RemoteRequestOptions): Promise<RemoteProviderHealth> {
+  const item = record(await request('/v1/provider/status', undefined, { ...options, auth: 'none' }));
+  if (!item) throw new Error('데이터 공급자 상태 응답이 올바르지 않습니다.');
+  const state = text(item['state']);
+  if (!['CONNECTED', 'DEGRADED', 'DISCONNECTED'].includes(state)) throw new Error('데이터 공급자 상태가 올바르지 않습니다.');
+  return {
+    provider: text(item['provider']), state: state as RemoteProviderHealth['state'],
+    lastCandleAt: typeof item['lastCandleAt'] === 'string' ? item['lastCandleAt'] : null,
+    delayed: item['delayed'] === true,
+  };
+}
+
+export async function loadRemoteRankings(period: '3M' | '6M' | '1Y', options?: RemoteRequestOptions): Promise<RemoteRankings> {
+  const item = record(await request(`/v1/rankings?period=${period}`, undefined, { ...options, auth: 'none' }));
+  if (!item) throw new Error('랭킹 응답이 올바르지 않습니다.');
+  return {
+    period,
+    combinations: array(item['combinations']) as CombinationRank[],
+    indicatorTiers: array(item['indicatorTiers']).flatMap((value) => {
+      const tier = record(value); const id = indicatorId(tier?.['indicatorId']);
+      return tier && id ? [{ indicatorId: id, name: text(tier['name']), tier: text(tier['tier']), score: number(tier['score']) }] : [];
+    }),
+    users: array(item['users']) as UserRank[],
+    disclosure: text(item['disclosure']), indicatorDisclosure: text(item['indicatorDisclosure']),
+  };
 }
 
 function requiredStrategy(value: unknown): Strategy {
@@ -450,22 +480,6 @@ function adviceFrom(value: unknown): SignalAdvice {
 export async function requestRemoteSignalAdvice(signalId: string, options?: RemoteRequestOptions): Promise<SignalAdvice> {
   const data = await request(`/v1/signals/${encodeURIComponent(signalId)}/advice`, { method: 'POST' }, { ...options, timeoutMs: options?.timeoutMs ?? 35_000 });
   return adviceFrom(data);
-}
-
-export function buildLocalSignalAdvice(signal: BuySignal): SignalAdvice {
-  return {
-    signalId: signal.id,
-    summary: `${signal.instrumentName}의 사용자 설정 조건이 완성 일봉 기준으로 충족되었습니다.`,
-    evidence: signal.reasons.length > 0 ? signal.reasons : ['저장된 세부 근거가 없습니다.'],
-    risks: [
-      ...(signal.delayed ? ['신호 데이터가 지연된 상태입니다. 기준 일봉과 생성 시각을 다시 확인하세요.'] : []),
-      '조건 충족은 이후 가격 방향을 보장하지 않습니다.',
-      '거래 비용과 시장 변동성은 이 신호에 반영되지 않을 수 있습니다.',
-    ],
-    questionsToConsider: ['감당 가능한 최대 손실 범위를 정했나요?', '현재 보유 종목과의 집중 위험을 확인했나요?'],
-    disclaimer: '정보·교육 목적의 기계적 설명이며 투자자문, 매매 권유 또는 수익 보장이 아닙니다.',
-    source: 'LOCAL', model: 'rules-v1', basedOn: signal.candleClose, generatedAt: new Date().toISOString(),
-  };
 }
 
 export async function updateRemoteProfileVisibility(input: {

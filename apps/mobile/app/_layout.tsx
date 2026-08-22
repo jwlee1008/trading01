@@ -41,7 +41,6 @@ function Navigation() {
         <Stack.Screen name="profile/[id]" options={{ title: '공개 프로필' }} />
         <Stack.Screen name="settings" options={{ title: '설정' }} />
         <Stack.Screen name="provider-status" options={{ title: '데이터 상태' }} />
-        <Stack.Screen name="demo-top50" options={{ title: '데모 TOP 50 관리' }} />
       </Stack>
     </>
   );

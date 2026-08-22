@@ -2,7 +2,6 @@ import { createStrategySchema, sellRuleSchema } from '../../../../packages/api-c
 import {
   buildRemoteSellRuleInput,
   buildRemoteStrategyInput,
-  buildLocalSignalAdvice,
   createRemoteStrategy,
   mapRemoteSnapshot,
   requestRemoteSignalAdvice,
@@ -70,6 +69,18 @@ describe('connected API snapshot', () => {
     expect(snapshot.strategyHistory.map((item) => item.id)).toEqual(['sv-1']);
   });
 
+  it('keeps KOSPI all and KOSPI top 10 as distinct universe identities', () => {
+    const snapshot = mapRemoteSnapshot({
+      strategies: [
+        { id: 'sv-all', strategyId: 's-all', universeVersionId: 'uuid-all', universeKind: 'KOSPI_ALL', rules: [] },
+        { id: 'sv-top10', strategyId: 's-top10', universeVersionId: 'uuid-top10', universeKind: 'KOSPI_TOP_10', rules: [] },
+      ],
+      signals: [], portfolios: [], orders: [],
+    });
+
+    expect(snapshot.strategies.map((item) => item.universeId)).toEqual(['kospi', 'kospiTop10']);
+  });
+
   it('maps sell-condition signal to position-bound alert', () => {
     const snapshot = mapRemoteSnapshot({
       strategies: [], portfolios: [], orders: [],
@@ -105,24 +116,31 @@ describe('connected API snapshot', () => {
   });
 
   it('sends one create mutation and maps returned server identity', async () => {
-    const fetcher = jest.fn((url: string | URL | Request) => Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve(String(url).endsWith('/v1/universe-versions') ? { data: [{ id: 'real-universe-uuid', kind: 'KOSPI_200' }] } : { data: {
-        id: 'sv-new', strategyId: 's-new', name: '원격 전략', version: 1, universeVersionId: 'uv-kospi200-202608',
-        logic: 'AND', rules: [{ left: { kind: 'INDICATOR', indicatorId: 'RSI' }, right: { kind: 'VALUE', value: 30 } }],
-        alertsEnabled: true, isPublic: false, locked: false, createdAt: '2026-08-15T00:00:00.000Z',
-      } }),
-    } as Response)) as unknown as jest.MockedFunction<typeof fetch>;
+    const fetcher = jest.fn((url: string | URL | Request) => {
+      const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(requestUrl.endsWith('/v1/universe-versions') ? { data: [{ id: 'real-universe-uuid', kind: 'KOSPI_200' }] } : { data: {
+          id: 'sv-new', strategyId: 's-new', name: '원격 전략', version: 1, universeVersionId: 'uv-kospi200-202608',
+          logic: 'AND', rules: [{ left: { kind: 'INDICATOR', indicatorId: 'RSI' }, right: { kind: 'VALUE', value: 30 } }],
+          alertsEnabled: true, isPublic: false, locked: false, createdAt: '2026-08-15T00:00:00.000Z',
+        } }),
+      } as Response);
+    }) as unknown as jest.MockedFunction<typeof fetch>;
 
     const strategy = await createRemoteStrategy({
       name: '원격 전략', universeId: 'kospi200', indicatorIds: ['rsi'], conditionMode: 'ALL', public: false,
-    }, { fetcher, baseUrl: 'https://api.test/' });
+    }, { fetcher, baseUrl: 'https://api.test/', accessToken: 'test-access-token' });
 
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.test/v1/universe-versions');
     expect(fetcher.mock.calls[1]?.[0]).toBe('https://api.test/v1/strategies');
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toMatchObject({ universeVersionId: 'real-universe-uuid' });
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('authorization')).toBe('Bearer test-access-token');
+    const body = fetcher.mock.calls[1]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('JSON body expected');
+    expect(JSON.parse(body)).toMatchObject({ universeVersionId: 'real-universe-uuid' });
     expect(strategy).toMatchObject({ id: 'sv-new', remoteStrategyId: 's-new', indicatorIds: ['rsi'] });
   });
 
@@ -130,7 +148,7 @@ describe('connected API snapshot', () => {
     const fetcher = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ data: {} }) } as Response)) as unknown as jest.MockedFunction<typeof fetch>;
     await updateRemoteAlertSettings({
       enabled: true, quietHoursEnabled: true, quietStart: '22:00', quietEnd: '07:00', showPriceOnLockScreen: false,
-    }, { fetcher, baseUrl: 'https://api.test' });
+    }, { fetcher, baseUrl: 'https://api.test', accessToken: 'test-access-token' });
     const init = fetcher.mock.calls[0]?.[1];
     expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.test/v1/alert-settings');
     if (typeof init?.body !== 'string') throw new Error('JSON body expected');
@@ -147,24 +165,13 @@ describe('connected API snapshot', () => {
     expect(headers.get('authorization')).toBe('Bearer supabase-access-token');
   });
 
-  it('builds safe local advice with delayed-data risk', () => {
-    const advice = buildLocalSignalAdvice({
-      id: 'sig-1', symbol: '005930', instrumentName: '삼성전자', strategyId: 'sv-1', closePrice: 71000,
-      changeRate: 0, candleClose: '2026-08-21T06:30:00.000Z', createdAt: '2026-08-21T06:31:00.000Z',
-      reasons: ['RSI 31.2'], values: [], delayed: true, read: false,
-    });
-    expect(advice).toMatchObject({ signalId: 'sig-1', source: 'LOCAL', evidence: ['RSI 31.2'] });
-    expect(advice.risks.join(' ')).toContain('지연');
-    expect(advice.disclaimer).toContain('투자자문');
-  });
-
   it('requests and validates remote signal advice', async () => {
     const fetcher = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ data: {
       signalId: 'sig-1', summary: '조건 충족 설명', evidence: ['RSI'], risks: ['변동성'],
       questionsToConsider: ['손실 범위?'], disclaimer: '교육 목적', source: 'GEMINI', model: 'test-model',
       basedOn: '2026-08-21T06:30:00.000Z', generatedAt: '2026-08-21T06:31:00.000Z',
     } }) } as Response)) as unknown as jest.MockedFunction<typeof fetch>;
-    const advice = await requestRemoteSignalAdvice('sig-1', { fetcher, baseUrl: 'https://api.test' });
+    const advice = await requestRemoteSignalAdvice('sig-1', { fetcher, baseUrl: 'https://api.test', accessToken: 'test-access-token' });
     expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.test/v1/signals/sig-1/advice');
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
     expect(advice).toMatchObject({ signalId: 'sig-1', source: 'GEMINI', model: 'test-model' });

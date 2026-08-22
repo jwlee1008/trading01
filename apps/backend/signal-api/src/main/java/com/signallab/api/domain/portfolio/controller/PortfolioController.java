@@ -24,12 +24,12 @@ public class PortfolioController {
 
     @GetMapping("/portfolios")
     public Map<String, Object> portfolios(@CurrentUser String userId) {
-        return ApiEnvelope.ok(portfolioQueryService.portfoliosFor(parseUserId(userId)), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(portfolioQueryService.portfoliosFor(parseUserId(userId)), databaseHealthService.isPostgres());
     }
 
     @GetMapping("/positions")
     public Map<String, Object> positions(@CurrentUser String userId) {
-        return ApiEnvelope.ok(portfolioQueryService.positionsFor(parseUserId(userId)), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(portfolioQueryService.positionsFor(parseUserId(userId)), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

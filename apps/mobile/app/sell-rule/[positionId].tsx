@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, Field, Screen, SectionTitle, Surface, ToggleRow, spacing } from '@signal/ui';
 import { Segmented, TitleBlock } from '@/components/common';
-import { indicators } from '@/data/mock';
+import { indicators } from '@/data/catalog';
 import type { IndicatorId, SellRule } from '@/domain/types';
 import { saveRemoteSellRule } from '@/services/connected-api';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
@@ -44,10 +44,11 @@ export default function SellRuleScreen() {
   const toggleTechnical = (id: IndicatorId) => setTechnical((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
   const save = async () => {
     if (invalid) return Alert.alert('저장할 수 없어요', invalid);
+    if (!remoteApiReady) return Alert.alert('로그인이 필요합니다', '매도 규칙은 서버에만 저장됩니다.');
     const rule: SellRule = { version: (existing?.version ?? 0) + 1, manualOnly, stopLossPercent: !manualOnly && stopOn ? toNumber(stop) : null, takeProfitPercent: !manualOnly && targetOn ? toNumber(target) : null, trailingStopPercent: !manualOnly && trailOn ? toNumber(trail) : null, maxHoldingDays: !manualOnly && daysOn ? Math.floor(toNumber(days)) : null, technicalIds: manualOnly ? [] : technical, technicalMode };
     setSaving(true);
     try {
-      if (remoteApiReady) await saveRemoteSellRule(position.id, rule);
+      await saveRemoteSellRule(position.id, rule);
       saveSellRule(position.id, rule);
       Alert.alert('새 규칙 버전을 저장했어요', '이 열린 포지션에 새 버전을 적용했습니다. 이전 버전 기록은 유지됩니다.');
       router.back();

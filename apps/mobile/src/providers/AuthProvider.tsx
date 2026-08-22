@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(nextSession);
       setInitializationError(null);
       setLoading(false);
-      if (event === 'SIGNED_OUT') useAppStore.getState().resetDemo();
+      if (event === 'SIGNED_OUT') useAppStore.getState().clearSessionData();
     });
     if (AppState.currentState === 'active') void client.auth.startAutoRefresh();
     const appState = AppState.addEventListener('change', (state) => {

@@ -7,7 +7,8 @@ import { useAppStore } from '@/store/useAppStore';
 const mockSignIn = jest.fn(() => Promise.resolve());
 
 jest.mock('expo-router', () => ({
-  router: { replace: jest.fn() },
+  router: { replace: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => false) },
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('@/providers/AuthProvider', () => ({
@@ -26,7 +27,7 @@ jest.mock('@/providers/AuthProvider', () => ({
 describe('Supabase auth screen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    useAppStore.setState({ hasSeenOnboarding: false, trialMode: true });
+    useAppStore.setState({ hasSeenOnboarding: false });
   });
 
   it('signs in then finishes onboarding', async () => {
@@ -37,8 +38,8 @@ describe('Supabase auth screen', () => {
 
     await waitFor(() => {
       expect(mockSignIn).toHaveBeenCalledWith('user@example.com', 'secret12');
-      expect(jest.requireMock<{ router: { replace: jest.Mock } }>('expo-router').router.replace).toHaveBeenCalledWith('/universe');
+      expect(jest.requireMock<{ router: { replace: jest.Mock } }>('expo-router').router.replace).toHaveBeenCalledWith({ pathname: '/universe', params: { origin: 'setup' } });
     });
-    expect(useAppStore.getState()).toMatchObject({ hasSeenOnboarding: true, trialMode: false });
+    expect(useAppStore.getState()).toMatchObject({ hasSeenOnboarding: true });
   });
 });

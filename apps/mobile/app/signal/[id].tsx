@@ -3,8 +3,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, ListRow, Metric, Screen, SectionTitle, Surface, spacing } from '@signal/ui';
 import { PriceChange, TitleBlock } from '@/components/common';
-import { universes } from '@/data/mock';
-import { acknowledgeRemoteSignal, buildLocalSignalAdvice, requestRemoteSignalAdvice } from '@/services/connected-api';
+import { acknowledgeRemoteSignal, requestRemoteSignalAdvice } from '@/services/connected-api';
+import { useUniverses } from '@/hooks/useUniverses';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
 import { useAppStore } from '@/store/useAppStore';
 import { formatDateTime, formatPrice } from '@/utils/format';
@@ -21,16 +21,14 @@ export default function SignalDetailScreen() {
   );
   const markRead = useAppStore((state) => state.markSignalRead);
   const remoteApiReady = useRemoteApiReady();
+  const universes = useUniverses().data ?? [];
   const [ackError, setAckError] = useState<string | null>(null);
   const [advice, setAdvice] = useState<SignalAdvice | null>(null);
   const [adviceBusy, setAdviceBusy] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const acknowledge = useCallback(async () => {
     if (!id) return;
-    if (!remoteApiReady) {
-      markRead(id);
-      return;
-    }
+    if (!remoteApiReady) return;
     try {
       await acknowledgeRemoteSignal(id);
       markRead(id);
@@ -45,7 +43,8 @@ export default function SignalDetailScreen() {
     setAdviceBusy(true);
     setAdviceError(null);
     try {
-      setAdvice(remoteApiReady ? await requestRemoteSignalAdvice(signal.id) : buildLocalSignalAdvice(signal));
+      if (!remoteApiReady) throw new Error('로그인이 필요합니다.');
+      setAdvice(await requestRemoteSignalAdvice(signal.id));
     } catch (caught) {
       setAdviceError(caught instanceof Error ? caught.message : 'AI 설명을 생성하지 못했습니다.');
     } finally {

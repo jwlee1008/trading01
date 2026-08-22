@@ -39,7 +39,7 @@ pnpm dev:mobile
 
 API 기본 주소는 `http://localhost:3000/v1`이며 `GET /v1/health`는 공개다. API와 Worker를 함께 실행하려면 `pnpm dev`를 사용한다. Android Emulator는 `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`, 실기기는 개발 PC의 LAN 주소를 사용한다.
 
-로컬 테스트 기본값은 `AUTH_MODE=mock`, `DATA_STORE=mock`이다. 실제 개발 환경은 `AUTH_MODE=supabase`, `DATA_STORE=postgres`, `DATABASE_URL`과 Supabase 키를 설정한다. service role 키는 모바일 환경 변수에 넣지 않는다.
+API는 PostgreSQL과 Supabase JWT 인증만 사용한다. `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`와 Supabase 키를 설정하며, service role 키는 모바일 환경 변수에 넣지 않는다.
 
 Worker 한 번 실행과 시장 데이터 준비:
 

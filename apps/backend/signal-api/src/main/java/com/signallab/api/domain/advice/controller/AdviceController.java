@@ -25,7 +25,7 @@ public class AdviceController {
 
     @PostMapping("/{signalId}/advice")
     public Map<String, Object> explain(@CurrentUser String userId, @PathVariable UUID signalId) {
-        return ApiEnvelope.ok(adviceService.explain(parseUserId(userId), signalId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(adviceService.explain(parseUserId(userId), signalId), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

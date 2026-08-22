@@ -1,30 +1,28 @@
 package com.signallab.worker.domain.outbox.service;
 
 import com.signallab.worker.global.config.WorkerProperties;
-import com.signallab.worker.global.config.RuntimeEnvironment;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
+import javax.sql.DataSource;
 import org.springframework.stereotype.Service;
 
 /** Dispatches redacted push messages using short database leases. */
 @Service
 public class PostgresOutboxDispatcher {
+    private final DataSource dataSource;
+
+    public PostgresOutboxDispatcher(DataSource dataSource) { this.dataSource = dataSource; }
 
     public DispatchReport dispatch(WorkerProperties properties) {
         if (!properties.isEnabled() || !"console".equalsIgnoreCase(properties.getPushProvider())) {
             return new DispatchReport(0, 0, "disabled");
         }
-        String databaseUrl = RuntimeEnvironment.get("DATABASE_URL");
-        if (databaseUrl == null || databaseUrl.isBlank()) {
-            throw new IllegalStateException("DATABASE_URL is required when Spring Worker console push is enabled");
-        }
         int batchSize = bounded(properties.getOutboxBatchSize(), 50, 1, 500, "outboxBatchSize");
         int leaseSeconds = bounded(properties.getOutboxLeaseSeconds(), 300, 1, 3600, "outboxLeaseSeconds");
-        try (Connection connection = DriverManager.getConnection(jdbcUrl(databaseUrl))) {
+        try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             List<OutboxMessage> messages = claim(connection, batchSize, leaseSeconds);
             int sent = 0;
@@ -103,9 +101,6 @@ public class PostgresOutboxDispatcher {
         return resolved;
     }
 
-    private static String jdbcUrl(String url) {
-        return url.startsWith("postgresql://") ? "jdbc:" + url : url;
-    }
 
     private record OutboxMessage(String id, String payload) {}
     public record DispatchReport(int sent, int failed, String provider) {}

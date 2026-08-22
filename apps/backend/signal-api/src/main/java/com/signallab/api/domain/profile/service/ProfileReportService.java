@@ -1,7 +1,5 @@
 package com.signallab.api.domain.profile.service;
 
-import com.signallab.api.global.config.DataStoreMode;
-import com.signallab.api.global.config.SignalProperties;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
@@ -14,11 +12,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ProfileReportService {
 
-    private final SignalProperties properties;
     private final JdbcTemplate jdbcTemplate;
 
-    public ProfileReportService(SignalProperties properties, JdbcTemplate jdbcTemplate) {
-        this.properties = properties;
+    public ProfileReportService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -29,8 +25,7 @@ public class ProfileReportService {
         }
         OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         UUID reportId = UUID.randomUUID();
-        if (properties.resolvedDataStore() != DataStoreMode.MOCK) {
-            UUID publicProfileId = jdbcTemplate.query(
+        UUID publicProfileId = jdbcTemplate.query(
                 "SELECT public_profile_id FROM profiles WHERE user_id = ? AND is_public = true AND deleted_at IS NULL",
                 rs -> rs.next() ? UUID.fromString(rs.getString(1)) : null,
                 targetUserId
@@ -49,9 +44,8 @@ public class ProfileReportService {
                 ),
                 reporterId, publicProfileId, reason
             );
-            reportId = row.id();
-            createdAt = row.createdAt();
-        }
+        reportId = row.id();
+        createdAt = row.createdAt();
         return Map.of(
             "id", reportId,
             "reporterId", reporterId,

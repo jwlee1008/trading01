@@ -27,7 +27,7 @@ public class RankingController {
 
     @GetMapping("/rankings")
     public Map<String, Object> rankings(@RequestParam(required = false) String period) {
-        return ApiEnvelope.ok(rankingService.rankings(period), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(rankingService.rankings(period), databaseHealthService.isPostgres());
     }
 
     @PostMapping("/rankings/combinations/{combinationId}/copy")
@@ -37,7 +37,7 @@ public class RankingController {
     ) {
         return ApiEnvelope.ok(
             rankingService.copyCombination(parseUserId(userId), combinationId),
-            databaseHealthService.isMockMode()
+            databaseHealthService.isPostgres()
         );
     }
 

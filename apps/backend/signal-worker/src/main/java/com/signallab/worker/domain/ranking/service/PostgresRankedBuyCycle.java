@@ -1,11 +1,9 @@
 package com.signallab.worker.domain.ranking.service;
 
 import com.signallab.worker.global.config.WorkerProperties;
-import com.signallab.worker.global.config.RuntimeEnvironment;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -16,22 +14,24 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.springframework.stereotype.Service;
 
 /** Creates deterministic D+1 BUY orders for active ranked tracks. */
 @Service
 public class PostgresRankedBuyCycle {
     private final RankedBuyAllocator allocator = new RankedBuyAllocator();
+    private final DataSource dataSource;
+
+    public PostgresRankedBuyCycle(DataSource dataSource) { this.dataSource = dataSource; }
 
     public Report run(WorkerProperties properties) {
         if (!properties.isEnabled() || !properties.isRankedBuyEnabled()) return new Report(0, 0, "disabled");
-        String databaseUrl = RuntimeEnvironment.get("DATABASE_URL");
-        if (databaseUrl == null || databaseUrl.isBlank()) throw new IllegalStateException("DATABASE_URL is required for ranked BUY cycle");
         int batch = properties.getRankedBuyBatchSize();
         if (batch < 1 || batch > 5_000) throw new IllegalArgumentException("rankedBuyBatchSize must be within 1..5000");
         LocalDate through = properties.getExpectedThrough() == null || properties.getExpectedThrough().isBlank()
             ? OffsetDateTime.now(ZoneOffset.ofHours(9)).toLocalDate() : LocalDate.parse(properties.getExpectedThrough());
-        try (Connection connection = DriverManager.getConnection(jdbcUrl(databaseUrl))) {
+        try (Connection connection = dataSource.getConnection()) {
             List<UUID> tracks = activeTracks(connection);
             int candidates = 0, orders = 0;
             for (UUID trackId : tracks) {
@@ -164,7 +164,6 @@ public class PostgresRankedBuyCycle {
             """)){s.setObject(1,t.userId());s.setObject(2,t.id());s.setObject(3,orderId);s.setObject(4,r.signalId());s.setString(5,r.symbol());s.setLong(6,quantity);s.setObject(7,r.sessionDate());s.setString(8,"order-created:"+orderId);s.executeUpdate();}
         return true;
     }
-    private static String jdbcUrl(String url){return url.startsWith("postgresql://")?"jdbc:"+url:url;}
     private record Track(UUID id,UUID userId,UUID portfolioId,UUID strategyVersionId,UUID universeVersionId,UUID sellRuleVersionId,UUID fillModelId,UUID costModelId,BigDecimal maxWeight,int maxOpenPositions,BigDecimal cash){}
     private record CandidateRow(UUID signalId,UUID instrumentId,String symbol,BigDecimal signalStrength,BigDecimal priorLiquidity,BigDecimal close,UUID sessionId,LocalDate sessionDate,OffsetDateTime openAt,BigDecimal buySlippageBps,BigDecimal spreadBps,BigDecimal buyFeeRate){}
     private record TrackReport(int candidates,int orders){}

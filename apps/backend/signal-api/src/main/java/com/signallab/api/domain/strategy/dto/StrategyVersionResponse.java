@@ -12,6 +12,7 @@ public record StrategyVersionResponse(
     int version,
     String name,
     String universeVersionId,
+    String universeKind,
     String logic,
     List<JsonNode> rules,
     boolean alertsEnabled,

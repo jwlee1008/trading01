@@ -3,11 +3,9 @@ package com.signallab.worker.domain.signal.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.signallab.worker.global.config.WorkerProperties;
-import com.signallab.worker.global.config.RuntimeEnvironment;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -18,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.springframework.stereotype.Service;
 
 /** Evaluates active position sell rules on the latest completed D1 candle. */
@@ -26,21 +25,21 @@ public class PostgresSellSignalCycle {
     private final ObjectMapper mapper;
     private final SellRuleEvaluator sellEvaluator;
     private final DailyStrategyEvaluator technicalEvaluator;
+    private final DataSource dataSource;
 
-    public PostgresSellSignalCycle(ObjectMapper mapper) {
+    public PostgresSellSignalCycle(ObjectMapper mapper, DataSource dataSource) {
         this.mapper = mapper;
         this.sellEvaluator = new SellRuleEvaluator();
         this.technicalEvaluator = new DailyStrategyEvaluator();
+        this.dataSource = dataSource;
     }
 
     public Report run(WorkerProperties properties) {
         if (!properties.isEnabled() || !properties.isSellCycleEnabled()) return new Report(0, 0, 0, 0, "disabled");
-        String databaseUrl = RuntimeEnvironment.get("DATABASE_URL");
-        if (databaseUrl == null || databaseUrl.isBlank()) throw new IllegalStateException("DATABASE_URL is required for sell cycle");
         LocalDate through = properties.getExpectedThrough() == null || properties.getExpectedThrough().isBlank()
             ? OffsetDateTime.now(ZoneOffset.ofHours(9)).toLocalDate() : LocalDate.parse(properties.getExpectedThrough());
         int evaluated = 0, created = 0, outbox = 0, rankedOrders = 0;
-        try (Connection connection = DriverManager.getConnection(jdbcUrl(databaseUrl))) {
+        try (Connection connection = dataSource.getConnection()) {
             for (Work work : loadWork(connection, through)) {
                 List<DailyStrategyEvaluator.Candle> candles = loadCandles(connection, work.instrumentId(), through,
                     Math.max(30, properties.getCandleLookback()));
@@ -229,7 +228,6 @@ public class PostgresSellSignalCycle {
     private void updateHighest(Connection c,Work w)throws Exception{try(PreparedStatement s=c.prepareStatement("UPDATE positions SET highest_completed_close=greatest(COALESCE(highest_completed_close,0),?),updated_at=now() WHERE id=?")){s.setBigDecimal(1,w.close());s.setObject(2,w.positionId());s.executeUpdate();}}
     private void update(Connection c,String sql,UUID id)throws Exception{try(PreparedStatement s=c.prepareStatement(sql)){s.setObject(1,id);s.executeUpdate();}}
     private BigDecimal netReturn(Work w){if(w.averageCost().signum()==0)return BigDecimal.ZERO;return w.close().divide(w.averageCost(),10,RoundingMode.HALF_UP).subtract(BigDecimal.ONE);}
-    private static String jdbcUrl(String url){return url.startsWith("postgresql://")?"jdbc:"+url:url;}
 
     private record Work(UUID positionId,UUID userId,UUID portfolioId,String portfolioKind,UUID instrumentId,long quantity,
       BigDecimal averageCost,BigDecimal highestClose,UUID sellRuleVersionId,BigDecimal stopLossRate,BigDecimal takeProfitRate,

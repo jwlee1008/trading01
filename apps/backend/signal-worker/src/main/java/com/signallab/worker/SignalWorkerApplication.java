@@ -8,6 +8,7 @@ import com.signallab.worker.domain.ranking.service.PostgresRankedBuyCycle;
 import com.signallab.worker.domain.signal.service.PostgresDailySignalCycle;
 import com.signallab.worker.domain.signal.service.PostgresSellSignalCycle;
 import com.signallab.worker.global.config.WorkerProperties;
+import com.signallab.worker.global.runtime.WorkerTaskRunner;
 import io.github.cdimascio.dotenv.Dotenv;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,18 +55,19 @@ public class SignalWorkerApplication {
     }
 
     @Bean
-    CommandLineRunner startup(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService) {
+    CommandLineRunner startup(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner) {
         return args -> {
             if (!"none".equals(properties.getMarketDataAction()) && !properties.getMarketDataAction().isBlank()) {
                 System.out.println(marketDataImportService.run(properties));
                 System.exit(0);
             }
             if (properties.isOnce()) {
-                System.out.println(dailySignalCycle.run(properties));
-                System.out.println(rankedBuyCycle.run(properties));
-                System.out.println(sellSignalCycle.run(properties));
-                System.out.println(paperOrderProcessor.process(properties));
-                System.out.println(outboxDispatcher.dispatch(properties));
+                String runKey = "manual:" + java.time.Instant.now();
+                taskRunner.run("signal", runKey, () -> dailySignalCycle.run(properties));
+                taskRunner.run("ranking", runKey, () -> rankedBuyCycle.run(properties));
+                taskRunner.run("sell-signal", runKey, () -> sellSignalCycle.run(properties));
+                taskRunner.run("paper-fill", runKey, () -> paperOrderProcessor.process(properties));
+                taskRunner.run("notification", runKey, () -> outboxDispatcher.dispatch(properties));
                 System.exit(0);
             }
         };

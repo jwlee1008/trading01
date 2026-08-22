@@ -1,9 +1,5 @@
 package com.signallab.api.domain.account.service;
 
-import com.signallab.api.global.config.DataStoreMode;
-import com.signallab.api.global.config.SignalProperties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -11,24 +7,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class AccountService {
 
-    private final SignalProperties properties;
     private final JdbcTemplate jdbcTemplate;
-    private final Set<String> deletedMockUsers = ConcurrentHashMap.newKeySet();
 
-    public AccountService(SignalProperties properties, JdbcTemplate jdbcTemplate) {
-        this.properties = properties;
+    public AccountService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
     public boolean isAccountDeleted(String userId) {
-        if (properties.resolvedDataStore() == DataStoreMode.MOCK) {
-            return deletedMockUsers.contains(userId);
-        }
-
-        if (jdbcTemplate == null) {
-            return false;
-        }
-
         try {
             Boolean deleted = jdbcTemplate.queryForObject(
                 """
@@ -45,18 +30,7 @@ public class AccountService {
         }
     }
 
-    public void markDeletedInMock(String userId) {
-        deletedMockUsers.add(userId);
-    }
-
     public void delete(String userId) {
-        if (properties.resolvedDataStore() == DataStoreMode.MOCK) {
-            if (!deletedMockUsers.add(userId)) {
-                throw new IllegalStateException("삭제된 계정입니다.");
-            }
-            return;
-        }
-
         int updated = jdbcTemplate.update(
             """
             update profiles

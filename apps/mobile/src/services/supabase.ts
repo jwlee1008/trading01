@@ -37,17 +37,14 @@ export const supabase: SupabaseClient | null = publicConfig
   : null;
 
 export async function getApiAccessToken(): Promise<string | null> {
-  if (supabase) {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw new Error('로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.');
-    return data.session?.access_token ?? null;
-  }
-  const devToken = process.env.EXPO_PUBLIC_DEV_AUTH_TOKEN?.trim();
-  return devToken || 'demo-token';
+  if (!supabase) throw new Error('Supabase 공개 환경 변수가 설정되지 않았습니다.');
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw new Error('로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.');
+  return data.session?.access_token ?? null;
 }
 
 export async function refreshApiAccessToken(): Promise<string | null> {
-  if (!supabase) return getApiAccessToken();
+  if (!supabase) throw new Error('Supabase 공개 환경 변수가 설정되지 않았습니다.');
   const { data, error } = await supabase.auth.refreshSession();
   if (error || !data.session) throw new Error('로그인 세션이 만료됐습니다. 다시 로그인하세요.');
   return data.session.access_token;

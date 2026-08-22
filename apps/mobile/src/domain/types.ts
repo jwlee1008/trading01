@@ -1,4 +1,4 @@
-export type UniverseId = 'demoTop50' | 'kospi200' | 'kosdaq150' | 'kospi' | 'kosdaq' | 'all' | 'custom';
+export type UniverseId = 'kospi200' | 'kosdaq150' | 'kospiTop10' | 'kospi' | 'kosdaq' | 'all' | 'custom';
 export type IndicatorId = 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'volume' | 'stochastic' | 'atr' | 'adx' | 'obv';
 export type PortfolioKind = 'MANUAL_LIVE' | 'SANDBOX_PAPER' | 'RANKED_PAPER';
 export type PositionStatus = 'OPEN' | 'EXIT_PENDING' | 'PARTIALLY_CLOSED' | 'CLOSED' | 'ARCHIVED';

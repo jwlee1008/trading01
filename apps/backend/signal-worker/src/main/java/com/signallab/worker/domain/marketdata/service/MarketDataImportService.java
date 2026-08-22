@@ -23,10 +23,10 @@ public class MarketDataImportService {
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final JdbcTemplate jdbc;
     private final KiwoomProviderFactory providerFactory;
-    private final DemoTop50DataService demoTop50DataService;
 
-    public MarketDataImportService(JdbcTemplate jdbc, KiwoomProviderFactory providerFactory, DemoTop50DataService demoTop50DataService) {
-        this.jdbc = jdbc; this.providerFactory = providerFactory; this.demoTop50DataService = demoTop50DataService;
+    public MarketDataImportService(JdbcTemplate jdbc, KiwoomProviderFactory providerFactory) {
+        this.jdbc = jdbc;
+        this.providerFactory = providerFactory;
     }
 
     public Report run(WorkerProperties properties) {
@@ -37,7 +37,6 @@ public class MarketDataImportService {
             case "refresh-kospi-top10" -> refreshKospiTop10(properties);
             case "backfill-candles" -> backfillCandles(properties);
             case "backfill-kospi-top10" -> backfillCandles(properties);
-            case "prepare-demo-top50" -> demoTop50DataService.prepare(properties);
             case "prepare" -> {
                 Report instruments = importInstruments(properties);
                 Report candles = backfillCandles(properties);
@@ -49,7 +48,6 @@ public class MarketDataImportService {
 
     /** Idempotent catch-up used by the long-running Worker. Provider calls occur only when the latest session is missing. */
     public synchronized Report automaticTop10Refresh(WorkerProperties properties) {
-        if (!properties.isDemoTop50Enabled()) throw new IllegalStateException("DEMO_TOP50_ENABLED=true is required for automatic TOP 10 refresh");
         KiwoomMarketDataProvider provider = providerFactory.create(properties);
         LocalDate through = provider.latestCompletedSession();
         if (automaticDataReady(through)) return new Report("automatic-top10-up-to-date", 10, 0, 0, 0);
@@ -66,17 +64,15 @@ public class MarketDataImportService {
         int previousMaxInstruments = properties.getBackfillMaxInstruments();
         try {
             Integer kiwoomCandles = jdbc.queryForObject("SELECT count(*) FROM candles WHERE provider='kiwoom'", Integer.class);
-            Integer syntheticCandles = jdbc.queryForObject("SELECT count(*) FROM candles WHERE provider='synthetic-demo'", Integer.class);
-            boolean initialHistory = kiwoomCandles == null || kiwoomCandles < 2_000 || syntheticCandles == null || syntheticCandles < 3_200;
+            boolean initialHistory = kiwoomCandles == null || kiwoomCandles < 2_000;
             properties.setTop100AsOf(through.toString());
             properties.setMarketDataThrough(through.toString());
             properties.setMarketDataFrom((initialHistory ? through.minusYears(1) : through.minusDays(14)).toString());
             properties.setBackfillMaxInstruments(10);
             Report universe = refreshKospiTop10(properties);
             Report candles = backfillCandlesForTop10(properties);
-            Report demo = demoTop50DataService.prepare(properties);
-            return new Report("automatic-top10-refreshed", universe.instruments(), candles.candles() + demo.candles(),
-                candles.gaps(), universe.invalid() + candles.invalid() + demo.invalid());
+            return new Report("automatic-top10-refreshed", universe.instruments(), candles.candles(),
+                candles.gaps(), universe.invalid() + candles.invalid());
         } finally {
             properties.setMarketDataFrom(previousFrom);
             properties.setMarketDataThrough(previousThrough);
@@ -99,12 +95,7 @@ public class MarketDataImportService {
               AND uv.finalized_at IS NOT NULL AND uv.effective_from=? ORDER BY uv.version DESC LIMIT 1)
               AND EXISTS (SELECT 1 FROM candles c WHERE c.instrument_id=i.id AND c.timeframe='D1' AND c.session_date=? AND c.is_final)
             """, Integer.class, through, through);
-        Integer demo = jdbc.queryForObject("""
-            SELECT count(*) FROM universe_memberships um WHERE um.universe_version_id=(SELECT uv.id FROM universe_versions uv
-              JOIN universe_definitions ud ON ud.id=uv.universe_definition_id WHERE ud.kind='DEMO_TOP_50'::universe_kind
-              AND uv.finalized_at IS NOT NULL AND uv.effective_from=? ORDER BY uv.version DESC LIMIT 1)
-            """, Integer.class, through);
-        return count != null && count == 10 && demo != null && demo == 50;
+        return count != null && count == 10;
     }
 
     private Report importCalendar(WorkerProperties properties) {

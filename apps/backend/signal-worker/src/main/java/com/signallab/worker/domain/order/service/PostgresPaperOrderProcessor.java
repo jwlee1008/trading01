@@ -1,11 +1,9 @@
 package com.signallab.worker.domain.order.service;
 
 import com.signallab.worker.global.config.WorkerProperties;
-import com.signallab.worker.global.config.RuntimeEnvironment;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -14,21 +12,23 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.springframework.stereotype.Service;
 
 /** Applies due D+1 paper fills from finalized PostgreSQL candle opens. */
 @Service
 public class PostgresPaperOrderProcessor {
+    private final DataSource dataSource;
+
+    public PostgresPaperOrderProcessor(DataSource dataSource) { this.dataSource = dataSource; }
 
     public Report process(WorkerProperties properties) {
         if (!properties.isEnabled() || !properties.isPaperOrdersEnabled()) return new Report(0, 0, "disabled");
-        String url = RuntimeEnvironment.get("DATABASE_URL");
-        if (url == null || url.isBlank()) throw new IllegalStateException("DATABASE_URL is required for paper order processing");
         LocalDate through = properties.getExpectedThrough() == null || properties.getExpectedThrough().isBlank()
             ? OffsetDateTime.now(ZoneOffset.ofHours(9)).toLocalDate() : LocalDate.parse(properties.getExpectedThrough());
         int batch = properties.getPaperOrderBatchSize();
         if (batch < 1 || batch > 1_000) throw new IllegalArgumentException("paperOrderBatchSize must be between 1 and 1000");
-        try (Connection connection = DriverManager.getConnection(jdbcUrl(url))) {
+        try (Connection connection = dataSource.getConnection()) {
             List<Order> orders = loadDue(connection, through, batch);
             int filled = 0;
             for (Order order : orders) if (order.fillable()) {
@@ -101,7 +101,6 @@ public class PostgresPaperOrderProcessor {
         return adjusted.divide(tick, 0, "BUY".equals(order.side()) ? RoundingMode.CEILING : RoundingMode.FLOOR).multiply(tick);
     }
 
-    private static String jdbcUrl(String url) { return url.startsWith("postgresql://") ? "jdbc:" + url : url; }
     private record Order(UUID id, String side, long quantity, String portfolioKind, OffsetDateTime openAt, BigDecimal cash, long availableQuantity,
                          BigDecimal buySlippageBps, BigDecimal sellSlippageBps, BigDecimal spreadBps, BigDecimal buyFeeRate, BigDecimal sellFeeRate,
                          BigDecimal sellTaxRate, BigDecimal officialOpen, BigDecimal volume, boolean isFinal, boolean isStale) {

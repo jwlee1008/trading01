@@ -37,8 +37,8 @@ signal:
     kiwoom-mode: ${KIWOOM_MODE:${BROKER_MODE:real}}
     kiwoom-app-key: ${KIWOOM_APP_KEY:${BROKER_APP_KEY:}}
     kiwoom-app-secret: ${KIWOOM_APP_SECRET:${BROKER_APP_SECRET:}}
-    kiwoom-mock-app-key: ${KIWOOM_APP_KEY_MOCK:}
-    kiwoom-mock-app-secret: ${KIWOOM_APP_SECRET_MOCK:}
+    kiwoom-demo-app-key: ${KIWOOM_APP_KEY_DEMO:}
+    kiwoom-demo-app-secret: ${KIWOOM_APP_SECRET_DEMO:}
     kiwoom-max-pages: ${KIWOOM_MAX_PAGES:30}
     backfill-chunk-days: ${BACKFILL_CHUNK_DAYS:180}
     backfill-max-retries: ${BACKFILL_MAX_RETRIES:3}
@@ -49,7 +49,5 @@ signal:
     universe-source-revision: ${MARKET_DATA_UNIVERSE_SOURCE_REVISION:}
     top100-as-of: ${TOP100_AS_OF:}
     backfill-universe-kind: ${BACKFILL_UNIVERSE_KIND:}
-    demo-top50-enabled: ${DEMO_TOP50_ENABLED:false}
-    demo-top50-real-count: ${DEMO_TOP50_REAL_COUNT:10}
-    demo-top50-synthetic-count: ${DEMO_TOP50_SYNTHETIC_COUNT:40}
-    demo-top50-seed: ${DEMO_TOP50_SEED:20260822}
+    task-max-retries: ${WORKER_TASK_MAX_RETRIES:3}
+    task-retry-delay-ms: ${WORKER_TASK_RETRY_DELAY_MS:500}

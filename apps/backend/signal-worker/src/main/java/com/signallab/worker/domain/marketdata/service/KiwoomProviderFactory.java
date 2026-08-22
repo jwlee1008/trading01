@@ -20,8 +20,8 @@ public class KiwoomProviderFactory {
         if (!demo && !"real".equals(properties.getKiwoomMode())) throw new IllegalArgumentException("KIWOOM_MODE must be real or demo");
         String baseUrl = properties.getKiwoomBaseUrl();
         if (baseUrl == null || baseUrl.isBlank()) baseUrl = demo ? "https://mockapi.kiwoom.com" : "https://api.kiwoom.com";
-        String appKey = demo && !properties.getKiwoomMockAppKey().isBlank() ? properties.getKiwoomMockAppKey() : properties.getKiwoomAppKey();
-        String appSecret = demo && !properties.getKiwoomMockAppSecret().isBlank() ? properties.getKiwoomMockAppSecret() : properties.getKiwoomAppSecret();
+        String appKey = demo && !properties.getKiwoomDemoAppKey().isBlank() ? properties.getKiwoomDemoAppKey() : properties.getKiwoomAppKey();
+        String appSecret = demo && !properties.getKiwoomDemoAppSecret().isBlank() ? properties.getKiwoomDemoAppSecret() : properties.getKiwoomAppSecret();
         int requestDelayMs = demo ? Math.max(1_100, properties.getBackfillRequestDelayMs())
             : Math.max(250, properties.getBackfillRequestDelayMs());
         TradingCalendar calendar = createCalendar(properties);

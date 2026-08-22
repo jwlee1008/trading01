@@ -32,7 +32,7 @@ public class ExecutionController {
         @PathVariable UUID portfolioId,
         @Valid @RequestBody ManualExecutionRequest request
     ) {
-        return ApiEnvelope.ok(manualExecutionService.register(parseUserId(userId), portfolioId, request), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(manualExecutionService.register(parseUserId(userId), portfolioId, request), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

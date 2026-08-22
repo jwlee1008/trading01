@@ -1,16 +1,27 @@
 import React from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { AppText, Banner, Button, Chip, Divider, Screen, Surface, spacing, useSignalTheme } from '@signal/ui';
+import { AppText, Banner, Button, Chip, Divider, EmptyState, ErrorState, LoadingState, Screen, Surface, spacing, useSignalTheme } from '@signal/ui';
 import { TitleBlock } from '@/components/common';
-import { universes } from '@/data/mock';
+import { useUniverses } from '@/hooks/useUniverses';
+import type { UniverseId } from '@/domain/types';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function UniverseScreen() {
+  const { origin } = useLocalSearchParams<{ origin?: string }>();
   const { colors } = useSignalTheme();
   const selected = useAppStore((state) => state.selectedUniverseId);
   const setUniverse = useAppStore((state) => state.setUniverse);
-  const choose = (id: (typeof universes)[number]['id']) => setUniverse(id);
+  const query = useUniverses();
+  const universes = query.data ?? [];
+  const choose = (id: UniverseId) => setUniverse(id);
+  const finish = () => {
+    if ((origin === 'create' || origin === 'home') && router.canGoBack()) router.back();
+    else router.replace('/(tabs)');
+  };
+  if (query.isPending) return <Screen><LoadingState label="확정 종목군 조회 중" /></Screen>;
+  if (query.isError) return <Screen><ErrorState onRetry={() => void query.refetch()} /></Screen>;
+  if (universes.length === 0) return <Screen><EmptyState title="사용 가능한 종목군이 없습니다" body="실제 종목 마스터와 종목군 버전을 먼저 준비하세요." /></Screen>;
   return (
     <Screen>
       <TitleBlock title="어디서 신호를 찾을까요?" body="범위는 전략 버전에 고정됩니다. 나중에 바꾸면 새 버전과 랭킹 트랙을 만듭니다." />
@@ -27,8 +38,8 @@ export default function UniverseScreen() {
         ))}
       </Surface>
       {selected === 'custom' ? <Button label="내 종목 목록 편집" kind="secondary" onPress={() => router.push('/watchlist')} /> : null}
-      <Button label="이 범위 사용" onPress={() => router.replace('/(tabs)')} />
-      <AppText variant="caption" tone="muted">포함 정책 v12: 보통주 포함 · 우선주/ETF/ETN/SPAC/관리종목 제외</AppText>
+      <Button label={origin === 'create' ? '전략 만들기로 돌아가기' : '이 범위 사용'} onPress={finish} />
+      <AppText variant="caption" tone="muted">확정된 종목군 버전과 구성 이력을 기준으로 평가합니다.</AppText>
     </Screen>
   );
 }

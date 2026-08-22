@@ -23,6 +23,6 @@ public class EntitlementController {
 
     @GetMapping("/me/entitlements")
     public Map<String, Object> entitlements(@CurrentUser String userId) {
-        return ApiEnvelope.ok(entitlementService.forUser(userId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(entitlementService.forUser(userId), databaseHealthService.isPostgres());
     }
 }

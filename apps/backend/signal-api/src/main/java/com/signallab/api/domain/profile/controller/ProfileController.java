@@ -30,7 +30,7 @@ public class ProfileController {
     public Map<String, Object> getPublicProfile(@PathVariable UUID userId) {
         return profileRepository.findByUserId(userId)
                 .filter(Profile::isPublic)
-                .map(profile -> ApiEnvelope.ok(profile, databaseHealthService.isMockMode()))
+                .map(profile -> ApiEnvelope.ok(profile, databaseHealthService.isPostgres()))
                 .orElseThrow(() -> new RuntimeException("Profile not found or not public"));
     }
 
@@ -40,7 +40,7 @@ public class ProfileController {
         @RequestBody VisibilityRequest request
     ) {
         profileRepository.updateVisibility(parseUserId(userId), request.isPublic());
-        return ApiEnvelope.ok(null, databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(null, databaseHealthService.isPostgres());
     }
 
     @PostMapping("/profiles/{userId}/reports")
@@ -51,7 +51,7 @@ public class ProfileController {
     ) {
         return ApiEnvelope.ok(
             profileReportService.report(parseUserId(reporterId), userId, request),
-            databaseHealthService.isMockMode()
+            databaseHealthService.isPostgres()
         );
     }
 

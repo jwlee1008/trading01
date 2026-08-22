@@ -37,12 +37,13 @@ public class StrategyService {
     public List<StrategyVersionResponse> findByUserId(UUID userId) {
         String versionsSql = """
             SELECT sv.id, sv.user_id, sv.strategy_id, sv.version, s.name, s.is_public,
-                   COALESCE(uv.source_revision, sv.universe_version_id::text) AS universe_version_id,
+                   sv.universe_version_id::text AS universe_version_id, ud.kind::text AS universe_kind,
                    sv.root_logic, sv.notifications_enabled, sv.created_at,
                    EXISTS (SELECT 1 FROM ranking_tracks rt WHERE rt.strategy_version_id = sv.id AND rt.status = 'ACTIVE') AS locked
             FROM strategy_versions sv
             JOIN strategies s ON s.id = sv.strategy_id
             JOIN universe_versions uv ON uv.id = sv.universe_version_id
+            JOIN universe_definitions ud ON ud.id = uv.universe_definition_id
             WHERE sv.user_id = ? AND s.archived_at IS NULL
             ORDER BY sv.created_at ASC
             """;
@@ -55,6 +56,7 @@ public class StrategyService {
                 rs.getInt("version"),
                 rs.getString("name"),
                 rs.getString("universe_version_id"),
+                rs.getString("universe_kind"),
                 "ALL".equals(rs.getString("root_logic")) ? "AND" : "OR",
                 rs.getBoolean("notifications_enabled"),
                 rs.getBoolean("is_public"),
@@ -62,7 +64,7 @@ public class StrategyService {
                 rs.getTimestamp("created_at").toInstant().atOffset(ZoneOffset.UTC)
             );
         }, userId).stream().map(row -> new StrategyVersionResponse(
-            row.id(), row.userId(), row.strategyId(), row.version(), row.name(), row.universeVersionId(), row.logic(),
+            row.id(), row.userId(), row.strategyId(), row.version(), row.name(), row.universeVersionId(), row.universeKind(), row.logic(),
             rulesFor(row.id()), row.alertsEnabled(), row.isPublic(), row.locked(), row.createdAt()
         )).toList();
     }
@@ -142,8 +144,12 @@ public class StrategyService {
             );
         }
         jdbcTemplate.update("UPDATE strategy_versions SET finalized_at = NOW() WHERE id = ?", inserted.id());
+        String universeKind = jdbcTemplate.queryForObject("""
+            SELECT ud.kind::text FROM universe_versions uv
+            JOIN universe_definitions ud ON ud.id=uv.universe_definition_id WHERE uv.id=?
+            """, String.class, universeVersionId);
         return new StrategyVersionResponse(
-            inserted.id(), userId, strategyId, version, input.name(), input.universeVersionId(), input.logic(), input.rules(),
+            inserted.id(), userId, strategyId, version, input.name(), universeVersionId.toString(), universeKind, input.logic(), input.rules(),
             input.alertsEnabled(), input.isPublic(), false, inserted.createdAt().toInstant().atOffset(ZoneOffset.UTC)
         );
     }
@@ -242,5 +248,5 @@ public class StrategyService {
 
     private record ValidatedRequest(String name, String universeVersionId, String logic, List<JsonNode> rules, boolean alertsEnabled, boolean isPublic) {}
     private record VersionInsert(UUID id, Timestamp createdAt) {}
-    private record VersionRow(UUID id, UUID userId, UUID strategyId, int version, String name, String universeVersionId, String logic, boolean alertsEnabled, boolean isPublic, boolean locked, java.time.OffsetDateTime createdAt) {}
+    private record VersionRow(UUID id, UUID userId, UUID strategyId, int version, String name, String universeVersionId, String universeKind, String logic, boolean alertsEnabled, boolean isPublic, boolean locked, java.time.OffsetDateTime createdAt) {}
 }

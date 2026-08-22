@@ -27,7 +27,7 @@ public class PositionSellRuleController {
 
     @PostMapping("/{positionId}/sell-rules")
     public Map<String, Object> save(@CurrentUser String userId, @PathVariable UUID positionId, @RequestBody SellRuleRequest request) {
-        return ApiEnvelope.ok(sellRuleService.save(parseUserId(userId), positionId, request), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(sellRuleService.save(parseUserId(userId), positionId, request), databaseHealthService.isPostgres());
     }
 
     private static UUID parseUserId(String userId) {

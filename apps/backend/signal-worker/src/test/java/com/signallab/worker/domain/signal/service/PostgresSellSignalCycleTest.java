@@ -11,7 +11,8 @@ class PostgresSellSignalCycleTest {
     @Test
     void cycleIsFailClosedAndDoesNotRequireDatabaseWhenDisabled() {
         WorkerProperties properties = new WorkerProperties();
-        PostgresSellSignalCycle.Report report = new PostgresSellSignalCycle(new ObjectMapper()).run(properties);
+        PostgresSellSignalCycle.Report report = new PostgresSellSignalCycle(new ObjectMapper(),
+            org.mockito.Mockito.mock(javax.sql.DataSource.class)).run(properties);
         assertEquals("disabled", report.source());
         assertEquals(0, report.signalsCreated());
         assertEquals(0, report.rankedOrdersCreated());
@@ -20,7 +21,8 @@ class PostgresSellSignalCycleTest {
     @Test
     void parsesLegacyTechnicalRuleStoredByApi() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        PostgresSellSignalCycle cycle = new PostgresSellSignalCycle(mapper);
+        PostgresSellSignalCycle cycle = new PostgresSellSignalCycle(mapper,
+            org.mockito.Mockito.mock(javax.sql.DataSource.class));
         DailyStrategyEvaluator.Rule rule = cycle.parseRule(mapper.readTree(
             "{\"indicatorId\":\"RSI\",\"operator\":\"LTE\",\"value\":30,\"params\":{\"period\":14}}"
         ));

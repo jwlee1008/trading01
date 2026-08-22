@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 class PostgresRankedBuyCycleTest {
     @Test
     void disabledCycleDoesNotRequireDatabase() {
-        PostgresRankedBuyCycle.Report report = new PostgresRankedBuyCycle().run(new WorkerProperties());
+        PostgresRankedBuyCycle.Report report = new PostgresRankedBuyCycle(
+            org.mockito.Mockito.mock(javax.sql.DataSource.class)).run(new WorkerProperties());
         assertEquals("disabled", report.source());
         assertEquals(0, report.ordersCreated());
     }

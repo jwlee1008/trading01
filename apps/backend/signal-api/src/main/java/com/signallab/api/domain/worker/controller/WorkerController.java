@@ -32,17 +32,10 @@ public class WorkerController {
         this.databaseHealthService = databaseHealthService;
     }
 
-    @PostMapping("/cycle")
-    public Map<String, Object> cycle(@RequestHeader(value = "x-worker-service-token", required = false) String token,
-                                     @RequestBody Map<String, Object> input) {
-        requireWorkerToken(token);
-        return ApiEnvelope.ok(workerCycleService.runCycle(input), databaseHealthService.isMockMode());
-    }
-
     @GetMapping("/state")
     public Map<String, Object> state(@RequestHeader(value = "x-worker-service-token", required = false) String token) {
         requireWorkerToken(token);
-        return ApiEnvelope.ok(workerCycleService.state(), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(workerCycleService.state(), databaseHealthService.isPostgres());
     }
 
     private void requireWorkerToken(String provided) {

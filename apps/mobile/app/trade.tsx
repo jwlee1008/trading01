@@ -18,17 +18,13 @@ export default function TradeScreen() {
   const remoteApiReady = useRemoteApiReady();
   const params = useLocalSearchParams<{ mode?: Mode; side?: 'BUY' | 'SELL'; signalId?: string; positionId?: string; symbol?: string; name?: string; price?: string }>();
   const position = useAppStore((state) => state.positions.find((item) => item.id === params.positionId));
-  const registerManual = useAppStore((state) => state.registerManualHolding);
-  const addManualBuy = useAppStore((state) => state.addManualBuy);
-  const sellManual = useAppStore((state) => state.sellManual);
-  const placePaperOrder = useAppStore((state) => state.placePaperOrder);
   const [mode, setMode] = useState<Mode>(params.mode ?? (position?.kind === 'SANDBOX_PAPER' ? 'paper' : 'manual'));
   const [side, setSide] = useState<'BUY' | 'SELL'>(params.side ?? 'BUY');
   const [symbol, setSymbol] = useState(params.symbol ?? position?.symbol ?? '');
   const [name, setName] = useState(params.name ?? position?.instrumentName ?? '');
   const [quantity, setQuantity] = useState(side === 'SELL' && position ? String(position.quantity) : '1');
   const [price, setPrice] = useState(params.price ?? (position ? String(position.currentPrice) : ''));
-  const [date, setDate] = useState('2026-08-15');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const qty = toNumber(quantity);
@@ -38,40 +34,20 @@ export default function TradeScreen() {
 
   const submit = async () => {
     if (error) return Alert.alert('확인 필요', error);
+    if (!remoteApiReady) return Alert.alert('로그인이 필요합니다', '실제 원장 작업은 로그인 후 서버에서 처리됩니다.');
     setSubmitting(true);
     try {
       if (mode === 'manual') {
-        if (remoteApiReady) {
-          await submitRemoteManualExecution({
-            positionId: position?.id ?? null,
-            symbol,
-            side,
-            price: unitPrice,
-            quantity: qty,
-            executedAt: `${date}T00:00:00.000Z`,
-            signalId: params.signalId ?? null,
-            memo,
-            idempotencyKey: remoteIdempotencyKey('manual'),
-          });
-        }
-        if (position && side === 'SELL') sellManual(position.id, qty, unitPrice);
-        else if (position) addManualBuy(position.id, qty, unitPrice);
-        else registerManual({ symbol, instrumentName: name.trim(), quantity: qty, price: unitPrice, boughtAt: date, memo, signalId: params.signalId ?? null });
+        await submitRemoteManualExecution({
+          positionId: position?.id ?? null, symbol, side, price: unitPrice, quantity: qty,
+          executedAt: `${date}T00:00:00.000Z`, signalId: params.signalId ?? null, memo,
+          idempotencyKey: remoteIdempotencyKey('manual'),
+        });
         Alert.alert('체결을 기록했어요', side === 'SELL' && position && qty === position.quantity ? '전량매도되어 감시를 종료합니다.' : '실제 거래를 수동 원장에 기록했습니다.');
         router.replace(position ? { pathname: '/position/[id]', params: { id: position.id } } : '/holdings');
       } else {
-        if (remoteApiReady) {
-          await submitRemotePaperOrder({
-            positionId: position?.id ?? null,
-            symbol,
-            side,
-            quantity: qty,
-            signalId: params.signalId ?? null,
-            idempotencyKey: remoteIdempotencyKey('paper'),
-          });
-        }
-        placePaperOrder({ side, symbol, instrumentName: name.trim(), quantity: qty, estimatedPrice: unitPrice, signalId: params.signalId ?? null, positionId: position?.id ?? null });
-        Alert.alert('주문을 접수했어요', '다음 체결 가능 거래일 공식 시가에 Mock 처리합니다. 체결 전 취소할 수 있어요.');
+        await submitRemotePaperOrder({ positionId: position?.id ?? null, symbol, side, quantity: qty, signalId: params.signalId ?? null, idempotencyKey: remoteIdempotencyKey('paper') });
+        Alert.alert('주문을 접수했어요', 'Worker가 다음 체결 가능 거래일의 공식 시가로 처리합니다. 체결 전 취소할 수 있습니다.');
         router.replace({ pathname: '/holdings', params: { kind: 'SANDBOX_PAPER' } });
       }
     } catch (reason) {
@@ -95,7 +71,7 @@ export default function TradeScreen() {
       <Surface style={{ gap: spacing.sm }}><View style={styles.row}><AppText tone="muted">예상 금액</AppText><AppText variant="subtitle">{formatPrice(total)}</AppText></View>{mode === 'paper' ? <><View style={styles.row}><AppText tone="muted">체결가</AppText><AppText>다음 공식 시가 ± slippage</AppText></View><View style={styles.row}><AppText tone="muted">비용</AppText><AppText>수수료 · 세금 · spread 반영</AppText></View></> : null}</Surface>
       {mode === 'manual' ? <Banner title="수동 기록은 사용자 랭킹에서 제외" body="실제 금액과 MANUAL_LIVE 정보는 공개 프로필에도 표시하지 않습니다." /> : <Banner tone="accent" title="연습 주문은 공식 랭킹에서 제외" body="체결 전 취소 가능 · 정수 수량 · 현금 부족/거래 불가 시 전체 거부" />}
       {error ? <AppText tone="negative">{error}</AppText> : null}
-      <Button label={submitting ? '처리 중…' : mode === 'manual' ? `${side === 'BUY' ? '매수' : '매도'} 체결 등록` : `${side} 주문 확인`} onPress={() => void submit()} disabled={Boolean(error) || submitting} />
+      <Button label={submitting ? '처리 중…' : mode === 'manual' ? `${side === 'BUY' ? '매수' : '매도'} 체결 등록` : `${side} 주문 확인`} onPress={() => void submit()} disabled={Boolean(error) || submitting || !remoteApiReady} />
     </Screen>
   );
 }

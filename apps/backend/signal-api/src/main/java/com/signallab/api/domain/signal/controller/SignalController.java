@@ -28,17 +28,17 @@ public class SignalController {
     @GetMapping
     public Map<String, Object> list(@CurrentUser String userId, @RequestParam(required = false) String type) {
         String normalized = "BUY".equals(type) ? "BUY_CONDITION" : "SELL".equals(type) ? "SELL_CONDITION" : type;
-        return ApiEnvelope.ok(signalService.findByUserId(parseUserId(userId), normalized), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(signalService.findByUserId(parseUserId(userId), normalized), databaseHealthService.isPostgres());
     }
 
     @GetMapping("/{signalId}")
     public Map<String, Object> detail(@CurrentUser String userId, @PathVariable UUID signalId) {
-        return ApiEnvelope.ok(signalService.findById(parseUserId(userId), signalId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(signalService.findById(parseUserId(userId), signalId), databaseHealthService.isPostgres());
     }
 
     @PatchMapping("/{signalId}/acknowledge")
     public Map<String, Object> acknowledge(@CurrentUser String userId, @PathVariable UUID signalId) {
-        return ApiEnvelope.ok(signalService.acknowledge(parseUserId(userId), signalId), databaseHealthService.isMockMode());
+        return ApiEnvelope.ok(signalService.acknowledge(parseUserId(userId), signalId), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, ListRow, Screen, Surface, spacing } from '@signal/ui';
 import { TitleBlock } from '@/components/common';
-import { indicators } from '@/data/mock';
+import { indicators } from '@/data/catalog';
 
 export default function IndicatorDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,7 +22,7 @@ export default function IndicatorDetailScreen() {
         <ListRow title="판정 시점" subtitle="일봉 종가 확정 뒤 false → true 전환" />
       </Surface>
       <Surface style={{ gap: spacing.sm }}><AppText variant="bodyStrong" tone="warning">흔한 오해 · 약점</AppText><AppText tone="muted">{indicator.caution}</AppText><AppText variant="caption" tone="muted">한 지표만으로 투자 결정을 내리지 마세요. 비용, 유동성, 데이터 지연도 결과를 바꿉니다.</AppText></Surface>
-      <Button label="이 지표로 전략 만들기" onPress={() => router.push('/(tabs)/create')} />
+      <Button label="이 지표로 전략 만들기" onPress={() => router.navigate('/(tabs)/create')} />
     </Screen>
   );
 }
