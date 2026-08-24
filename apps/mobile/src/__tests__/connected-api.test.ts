@@ -42,6 +42,7 @@ describe('connected API snapshot', () => {
     expect(snapshot.signals[0]).toMatchObject({ id: 'sig-1', symbol: '005930', closePrice: 71000 });
     expect(snapshot.positions[0]).toMatchObject({ id: 'pos-1', kind: 'SANDBOX_PAPER', quantity: 10 });
     expect(snapshot.orders[0]).toMatchObject({ id: 'ord-1', side: 'SELL', positionId: 'pos-1' });
+    expect(snapshot.portfolioIds).toEqual({ SANDBOX_PAPER: 'pf-sandbox' });
     expect(snapshot.sandboxCash).toBe(9000000);
   });
 
@@ -53,7 +54,7 @@ describe('connected API snapshot', () => {
       orders: [{ id: 'bad', portfolioId: 'bad', status: 'PENDING' }],
     });
 
-    expect(snapshot).toEqual({ strategies: [], strategyHistory: [], signals: [], positions: [], orders: [], sandboxCash: 0 });
+    expect(snapshot).toEqual({ strategies: [], strategyHistory: [], signals: [], positions: [], orders: [], portfolioIds: {}, sandboxCash: 0, rankingTrack: null });
   });
 
   it('keeps latest remote strategy and moves prior versions to history', () => {

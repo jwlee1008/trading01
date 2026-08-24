@@ -7,11 +7,11 @@ import com.signallab.api.global.web.ApiEnvelope;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,6 +36,24 @@ public class WorkerController {
     public Map<String, Object> state(@RequestHeader(value = "x-worker-service-token", required = false) String token) {
         requireWorkerToken(token);
         return ApiEnvelope.ok(workerCycleService.state(), databaseHealthService.isPostgres());
+    }
+
+    @PostMapping("/tasks/{taskName}")
+    public Map<String, Object> request(
+        @RequestHeader(value = "x-worker-service-token", required = false) String token,
+        @org.springframework.web.bind.annotation.PathVariable String taskName
+    ) {
+        requireWorkerToken(token);
+        return ApiEnvelope.ok(workerCycleService.request(taskName), databaseHealthService.isPostgres());
+    }
+
+    @PostMapping("/runs/{runId}/retry")
+    public Map<String, Object> retry(
+        @RequestHeader(value = "x-worker-service-token", required = false) String token,
+        @org.springframework.web.bind.annotation.PathVariable UUID runId
+    ) {
+        requireWorkerToken(token);
+        return ApiEnvelope.ok(workerCycleService.retry(runId), databaseHealthService.isPostgres());
     }
 
     private void requireWorkerToken(String provided) {

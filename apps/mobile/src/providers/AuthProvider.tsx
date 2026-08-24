@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Linking } from 'react-native';
+import * as ExpoLinking from 'expo-linking';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase, supabaseConfigured } from '@/services/supabase';
+import { applySupabaseRecoveryUrl, supabase, supabaseConfigured } from '@/services/supabase';
 import { useAppStore } from '@/store/useAppStore';
 
 interface SignUpResult {
@@ -17,6 +18,8 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, nickname: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,10 +59,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (state === 'active') void client.auth.startAutoRefresh();
       else void client.auth.stopAutoRefresh();
     });
+    const openRecoveryUrl = (url: string | null) => {
+      if (url) void applySupabaseRecoveryUrl(url).catch(() => setInitializationError('비밀번호 재설정 링크를 열지 못했습니다.'));
+    };
+    void Linking.getInitialURL().then(openRecoveryUrl);
+    const linking = Linking.addEventListener('url', ({ url }) => openRecoveryUrl(url));
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
       appState.remove();
+      linking.remove();
       void client.auth.stopAutoRefresh();
     };
   }, []);
@@ -85,6 +94,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     signOut: async () => {
       const { error } = await requireSupabase().auth.signOut();
+      if (error) throw new Error(error.message);
+    },
+    requestPasswordReset: async (email) => {
+      const redirectTo = ExpoLinking.createURL('/auth', { queryParams: { mode: 'update-password' } });
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) throw new Error(error.message);
+    },
+    updatePassword: async (password) => {
+      const { error } = await requireSupabase().auth.updateUser({ password });
       if (error) throw new Error(error.message);
     },
   }), [initializationError, loading, session]);

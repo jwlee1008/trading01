@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { RemoteSnapshot } from '@/domain/remote';
-import type { AppAlert, BuySignal, PaperOrder, Position, SellRule, Strategy, UniverseId } from '@/domain/types';
+import type { RankingTrack, RemoteSnapshot } from '@/domain/remote';
+import type { AppAlert, BuySignal, PaperOrder, PortfolioKind, Position, SellRule, Strategy, UniverseId } from '@/domain/types';
 
 type ConnectionMode = 'online' | 'offline' | 'delayed' | 'error';
 
@@ -19,11 +19,13 @@ interface AppState {
   signals: BuySignal[];
   positions: Position[];
   orders: PaperOrder[];
+  portfolioIds: Partial<Record<PortfolioKind, string>>;
   sandboxCash: number;
   alerts: AppAlert[];
   connectionMode: ConnectionMode;
   notificationsEnabled: boolean;
   quietHoursEnabled: boolean;
+  rankingTrack: RankingTrack | null;
   setHydrated: (hydrated: boolean) => void;
   completeOnboarding: () => void;
   setUniverse: (id: UniverseId) => void;
@@ -31,6 +33,7 @@ interface AppState {
   setConnectionMode: (mode: ConnectionMode) => void;
   applyRemoteSnapshot: (snapshot: RemoteSnapshot) => void;
   upsertRemoteStrategy: (strategy: Strategy) => void;
+  removeRemoteStrategy: (remoteStrategyId: string) => void;
   markSignalRead: (id: string) => void;
   markAlertRead: (id: string) => void;
   markAllAlertsRead: () => void;
@@ -41,12 +44,13 @@ interface AppState {
   setNickname: (value: string) => void;
   setNotificationsEnabled: (value: boolean) => void;
   setQuietHoursEnabled: (value: boolean) => void;
+  setRankingTrack: (value: RankingTrack | null) => void;
   clearSessionData: () => void;
 }
 
 const remoteInitial = {
   strategies: [] as Strategy[], strategyHistory: [] as Strategy[], signals: [] as BuySignal[],
-  positions: [] as Position[], orders: [] as PaperOrder[], sandboxCash: 0, alerts: [] as AppAlert[],
+  positions: [] as Position[], orders: [] as PaperOrder[], portfolioIds: {} as Partial<Record<PortfolioKind, string>>, sandboxCash: 0, alerts: [] as AppAlert[], rankingTrack: null as RankingTrack | null,
 };
 
 export const useAppStore = create<AppState>()(
@@ -74,8 +78,14 @@ export const useAppStore = create<AppState>()(
         signals: snapshot.signals,
         positions: snapshot.positions,
         orders: snapshot.orders,
+        portfolioIds: snapshot.portfolioIds,
         sandboxCash: snapshot.sandboxCash,
+        rankingTrack: snapshot.rankingTrack,
         alerts: snapshot.alerts ?? [],
+        ...(snapshot.nickname === undefined ? {} : { nickname: snapshot.nickname }),
+        ...(snapshot.profilePublic === undefined ? {} : { profilePublic: snapshot.profilePublic }),
+        ...(snapshot.delayedPositionPublic === undefined ? {} : { delayedPositionPublic: snapshot.delayedPositionPublic }),
+        ...(snapshot.selectedUniverseId === undefined ? {} : { selectedUniverseId: snapshot.selectedUniverseId }),
         ...(snapshot.notificationsEnabled === undefined ? {} : { notificationsEnabled: snapshot.notificationsEnabled }),
         ...(snapshot.quietHoursEnabled === undefined ? {} : { quietHoursEnabled: snapshot.quietHoursEnabled }),
       }),
@@ -87,6 +97,10 @@ export const useAppStore = create<AppState>()(
           strategyHistory: [...(current && current.id !== strategy.id ? [current] : []), ...state.strategyHistory],
         };
       }),
+      removeRemoteStrategy: (remoteStrategyId) => set((state) => ({
+        strategies: state.strategies.filter((item) => (item.remoteStrategyId ?? item.id) !== remoteStrategyId),
+        strategyHistory: state.strategyHistory.filter((item) => (item.remoteStrategyId ?? item.id) !== remoteStrategyId),
+      })),
       markSignalRead: (id) => set((state) => ({ signals: state.signals.map((item) => item.id === id ? { ...item, read: true } : item) })),
       markAlertRead: (id) => set((state) => ({ alerts: state.alerts.map((item) => item.id === id ? { ...item, read: true } : item) })),
       markAllAlertsRead: () => set((state) => ({ alerts: state.alerts.map((item) => ({ ...item, read: true })) })),
@@ -97,6 +111,7 @@ export const useAppStore = create<AppState>()(
       setNickname: (nickname) => set({ nickname }),
       setNotificationsEnabled: (notificationsEnabled) => set({ notificationsEnabled }),
       setQuietHoursEnabled: (quietHoursEnabled) => set({ quietHoursEnabled }),
+      setRankingTrack: (rankingTrack) => set({ rankingTrack }),
       clearSessionData: () => set({ ...remoteInitial, nickname: '', profilePublic: false, delayedPositionPublic: false }),
     }),
     {

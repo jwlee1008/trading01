@@ -18,7 +18,7 @@ public class WorkerTaskRunner {
         this.properties = properties;
     }
 
-    public void run(String taskName, String runKey, Supplier<?> task) {
+    public boolean run(String taskName, String runKey, Supplier<?> task) {
         int claimed = jdbc.update("""
             INSERT INTO worker_task_runs(task_name,run_key,status,attempt_count,started_at,finished_at,last_error,result)
             VALUES (?,?,'RUNNING',0,now(),null,null,null)
@@ -27,7 +27,7 @@ public class WorkerTaskRunner {
             WHERE worker_task_runs.status IN ('FAILED','SKIPPED')
                OR (worker_task_runs.status='RUNNING' AND worker_task_runs.started_at < now() - interval '10 minutes')
             """, taskName, runKey);
-        if (claimed == 0) return;
+        if (claimed == 0) return false;
 
         int maxAttempts = Math.max(1, Math.min(properties.getTaskMaxRetries(), 10));
         long retryDelayMs = Math.max(0, Math.min(properties.getTaskRetryDelayMs(), 30_000));
@@ -42,7 +42,7 @@ public class WorkerTaskRunner {
                     WHERE task_name=? AND run_key=?
                     """, json, taskName, runKey);
                 System.out.println(taskName + " succeeded: " + result);
-                return;
+                return true;
             } catch (Exception error) {
                 String message = safeMessage(error);
                 if (attempt == maxAttempts) {
@@ -51,7 +51,7 @@ public class WorkerTaskRunner {
                         WHERE task_name=? AND run_key=?
                         """, message, taskName, runKey);
                     System.err.println(taskName + " failed after " + attempt + " attempt(s): " + message);
-                    return;
+                    return false;
                 }
                 try {
                     Thread.sleep(retryDelayMs * attempt);
@@ -61,10 +61,11 @@ public class WorkerTaskRunner {
                         UPDATE worker_task_runs SET status='FAILED',finished_at=now(),last_error=?,result=null
                         WHERE task_name=? AND run_key=?
                         """, "interrupted", taskName, runKey);
-                    return;
+                    return false;
                 }
             }
         }
+        return false;
     }
 
     private String safeMessage(Exception error) {

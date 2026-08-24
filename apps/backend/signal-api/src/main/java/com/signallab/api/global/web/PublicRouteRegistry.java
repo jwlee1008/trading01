@@ -21,7 +21,9 @@ public class PublicRouteRegistry {
         // Internal worker routes authenticate with a service token in their controller,
         // rather than an end-user bearer token.
         new RoutePattern(HttpMethod.POST, "/v1/internal/worker/cycle"),
-        new RoutePattern(HttpMethod.GET, "/v1/internal/worker/state")
+        new RoutePattern(HttpMethod.GET, "/v1/internal/worker/state"),
+        new RoutePattern(HttpMethod.POST, "/v1/internal/worker/tasks/*"),
+        new RoutePattern(HttpMethod.POST, "/v1/internal/worker/runs/*/retry")
     );
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();

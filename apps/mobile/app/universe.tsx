@@ -1,23 +1,35 @@
 import React from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, ErrorState, LoadingState, Screen, Surface, spacing, useSignalTheme } from '@signal/ui';
 import { TitleBlock } from '@/components/common';
 import { useUniverses } from '@/hooks/useUniverses';
 import type { UniverseId } from '@/domain/types';
 import { useAppStore } from '@/store/useAppStore';
+import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
+import { saveRemoteUniversePreference } from '@/services/connected-api';
 
 export default function UniverseScreen() {
   const { origin } = useLocalSearchParams<{ origin?: string }>();
   const { colors } = useSignalTheme();
   const selected = useAppStore((state) => state.selectedUniverseId);
   const setUniverse = useAppStore((state) => state.setUniverse);
+  const remoteApiReady = useRemoteApiReady();
+  const [saving, setSaving] = React.useState(false);
   const query = useUniverses();
   const universes = query.data ?? [];
   const choose = (id: UniverseId) => setUniverse(id);
-  const finish = () => {
-    if ((origin === 'create' || origin === 'home') && router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+  const finish = async () => {
+    setSaving(true);
+    try {
+      if (remoteApiReady) await saveRemoteUniversePreference(selected);
+      if ((origin === 'create' || origin === 'home') && router.canGoBack()) router.back();
+      else router.replace('/(tabs)');
+    } catch (caught) {
+      Alert.alert('종목 범위 저장 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
+    } finally {
+      setSaving(false);
+    }
   };
   if (query.isPending) return <Screen><LoadingState label="확정 종목군 조회 중" /></Screen>;
   if (query.isError) return <Screen><ErrorState onRetry={() => void query.refetch()} /></Screen>;
@@ -38,7 +50,7 @@ export default function UniverseScreen() {
         ))}
       </Surface>
       {selected === 'custom' ? <Button label="내 종목 목록 편집" kind="secondary" onPress={() => router.push('/watchlist')} /> : null}
-      <Button label={origin === 'create' ? '전략 만들기로 돌아가기' : '이 범위 사용'} onPress={finish} />
+      <Button label={saving ? '저장 중…' : origin === 'create' ? '전략 만들기로 돌아가기' : '이 범위 사용'} onPress={() => { void finish(); }} disabled={saving} />
       <AppText variant="caption" tone="muted">확정된 종목군 버전과 구성 이력을 기준으로 평가합니다.</AppText>
     </Screen>
   );

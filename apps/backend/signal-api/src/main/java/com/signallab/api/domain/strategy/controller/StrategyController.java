@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,6 +45,12 @@ public class StrategyController {
         @Valid @RequestBody StrategyRequest request
     ) {
         return ApiEnvelope.ok(strategyService.revise(parseUserId(userId), strategyId, request), databaseHealthService.isPostgres());
+    }
+
+    @DeleteMapping("/{strategyId}")
+    public Map<String, Object> archive(@CurrentUser String userId, @PathVariable UUID strategyId) {
+        strategyService.archive(parseUserId(userId), strategyId);
+        return ApiEnvelope.ok(Map.of("archived", true), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

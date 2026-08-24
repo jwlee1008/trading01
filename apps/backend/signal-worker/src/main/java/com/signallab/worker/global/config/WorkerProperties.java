@@ -16,7 +16,10 @@ public class WorkerProperties {
     private boolean paperOrdersEnabled;
     private boolean sellCycleEnabled;
     private boolean rankedBuyEnabled;
+    private boolean rankingSnapshotEnabled;
+    private boolean rankingNavEnabled;
     private boolean marketDataAutoEnabled;
+    private int marketDataAutoBatchSize = 25;
     private int rankedBuyBatchSize = 500;
     private int paperOrderBatchSize = 100;
     private String marketDataAction = "none";
@@ -68,8 +71,14 @@ public class WorkerProperties {
     public void setSellCycleEnabled(boolean value) { this.sellCycleEnabled = value; }
     public boolean isRankedBuyEnabled() { return rankedBuyEnabled; }
     public void setRankedBuyEnabled(boolean value) { this.rankedBuyEnabled = value; }
+    public boolean isRankingSnapshotEnabled() { return rankingSnapshotEnabled; }
+    public void setRankingSnapshotEnabled(boolean value) { this.rankingSnapshotEnabled = value; }
+    public boolean isRankingNavEnabled() { return rankingNavEnabled; }
+    public void setRankingNavEnabled(boolean value) { this.rankingNavEnabled = value; }
     public boolean isMarketDataAutoEnabled() { return marketDataAutoEnabled; }
     public void setMarketDataAutoEnabled(boolean value) { this.marketDataAutoEnabled = value; }
+    public int getMarketDataAutoBatchSize() { return marketDataAutoBatchSize; }
+    public void setMarketDataAutoBatchSize(int value) { this.marketDataAutoBatchSize = value; }
     public int getRankedBuyBatchSize() { return rankedBuyBatchSize; }
     public void setRankedBuyBatchSize(int value) { this.rankedBuyBatchSize = value; }
     public int getPaperOrderBatchSize() { return paperOrderBatchSize; }

@@ -52,6 +52,20 @@ if (moduleName === "api") {
 
 const executable = process.platform === "win32" ? "gradlew.bat" : "sh";
 const executableArgs = process.platform === "win32" ? args : ["./gradlew", ...args];
-const child = spawn(executable, executableArgs, { cwd: backend, env, stdio: "inherit", shell: false });
+const child = spawn(executable, executableArgs, {
+  cwd: backend, env, stdio: "inherit", shell: false,
+  detached: process.platform !== "win32",
+});
+let stopping = false;
+const stop = (signal) => {
+  if (stopping || child.exitCode !== null) return;
+  stopping = true;
+  try {
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch { /* The Gradle process already exited. */ }
+};
+process.on("SIGINT", () => stop("SIGINT"));
+process.on("SIGTERM", () => stop("SIGTERM"));
 child.on("error", (error) => { console.error(error.message); process.exitCode = 1; });
-child.on("exit", (code, signal) => { process.exitCode = signal ? 1 : (code ?? 1); });
+child.on("exit", (code, signal) => { process.exitCode = stopping ? 0 : signal ? 1 : (code ?? 1); });

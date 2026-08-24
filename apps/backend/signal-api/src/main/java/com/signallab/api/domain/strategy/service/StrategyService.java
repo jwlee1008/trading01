@@ -116,6 +116,20 @@ public class StrategyService {
         }
     }
 
+    @Transactional
+    public void archive(UUID userId, UUID strategyId) {
+        Integer locked = jdbcTemplate.query("""
+            SELECT 1 FROM ranking_tracks rt JOIN strategy_versions sv ON sv.id=rt.strategy_version_id
+            WHERE sv.strategy_id=? AND rt.status='ACTIVE' LIMIT 1
+            """, rs -> rs.next() ? 1 : null, strategyId);
+        if (locked != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "활성 공식 랭킹 전략은 삭제할 수 없습니다.");
+        int updated = jdbcTemplate.update("""
+            UPDATE strategies SET archived_at=now(),is_public=false,updated_at=now()
+            WHERE id=? AND user_id=? AND archived_at IS NULL
+            """, strategyId, userId);
+        if (updated == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "전략을 찾을 수 없습니다.");
+    }
+
     private StrategyVersionResponse createVersion(UUID userId, UUID strategyId, int version, UUID universeVersionId, ValidatedRequest input) {
         VersionInsert inserted = jdbcTemplate.queryForObject(
             """
@@ -203,11 +217,16 @@ public class StrategyService {
         if (!"AND".equals(request.logic()) && !"OR".equals(request.logic())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전략 논리값이 올바르지 않습니다.");
         }
-        if (request.rules() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전략 규칙이 필요합니다.");
+        if (request.rules() == null || request.rules().isEmpty() || request.rules().size() > 5) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전략 규칙은 1~5개여야 합니다.");
         }
         List<JsonNode> canonicalRules = new ArrayList<>();
-        for (JsonNode rule : request.rules()) canonicalRules.add(canonicalRule(rule));
+        Set<String> identities = new java.util.HashSet<>();
+        for (JsonNode rule : request.rules()) {
+            JsonNode canonical = canonicalRule(rule);
+            if (!identities.add(canonical.toString())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "같은 전략 규칙을 중복해서 사용할 수 없습니다.");
+            canonicalRules.add(canonical);
+        }
         return new ValidatedRequest(name, request.universeVersionId(), request.logic(), List.copyOf(canonicalRules),
             request.alertsEnabled() == null || request.alertsEnabled(), request.isPublic() != null && request.isPublic());
     }
@@ -228,6 +247,10 @@ public class StrategyService {
         if (!OPERATORS.contains(rule.path("operator").asText())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 전략 연산자입니다.");
         validateOperand(rule.get("left"), false);
         validateOperand(rule.get("right"), true);
+        if (!"INDICATOR".equals(rule.path("left").path("kind").asText())
+            && !"INDICATOR".equals(rule.path("right").path("kind").asText())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "각 전략 규칙에는 지표가 하나 이상 필요합니다.");
+        }
         return rule;
     }
 

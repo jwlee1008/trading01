@@ -5,7 +5,8 @@ import { AppText, Banner, Button, Chip, Divider, EmptyState, ListRow, Metric, Sc
 import { useAppStore } from '@/store/useAppStore';
 import { formatRate, formatWon } from '@/utils/format';
 import { profitRate, unrealizedProfit } from '@/domain/portfolio';
-import { connectedApiEnabled } from '@/services/connected-api';
+import { connectedApiEnabled, endRemoteRankingTrack } from '@/services/connected-api';
+import { Alert } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabaseConfigured } from '@/services/supabase';
 import { useProviderHealth } from '@/hooks/useProviderHealth';
@@ -19,6 +20,8 @@ export default function MyScreen() {
   const provider = useProviderHealth();
   const open = positions.filter((item) => item.status !== 'CLOSED');
   const ranked = open.filter((item) => item.kind === 'RANKED_PAPER');
+  const rankingTrack = useAppStore((state) => state.rankingTrack);
+  const setRankingTrack = useAppStore((state) => state.setRankingTrack);
   const nickname = storedNickname || String(auth.user?.user_metadata?.['nickname'] ?? '') || (auth.session ? '사용자' : '게스트');
   const totalProfit = open.reduce((sum, item) => sum + unrealizedProfit(item), 0);
   const weightedRate = open.length ? open.reduce((sum, item) => sum + profitRate(item), 0) / open.length : 0;
@@ -39,7 +42,7 @@ export default function MyScreen() {
         <Divider />
         <ListRow title="연습 페이퍼" subtitle={`${open.filter((item) => item.kind === 'SANDBOX_PAPER').length}개 · 직접 주문`} onPress={() => router.push({ pathname: '/holdings', params: { kind: 'SANDBOX_PAPER' } })} />
         <Divider />
-        <ListRow title="공식 랭킹 페이퍼" subtitle={ranked.length ? `${ranked.length}개 · 전략 잠김 · D+1 가상 체결` : '활성 트랙 없음'} onPress={() => ranked.length ? router.push({ pathname: '/profile/[id]', params: { id: 'me' } }) : router.navigate('/(tabs)/rankings')} />
+        <ListRow title="공식 랭킹 페이퍼" subtitle={rankingTrack ? `${rankingTrack.strategyName} · ${ranked.length}개 보유 · D+1 가상 체결` : '활성 트랙 없음'} onPress={() => rankingTrack ? router.push({ pathname: '/profile/[id]', params: { id: 'me' } }) : router.navigate('/(tabs)/create')} />
         <Divider />
         <ListRow title="종료 포지션 기록" subtitle="전량매도 뒤 감시 종료" onPress={() => router.push('/history')} />
       </Surface>
@@ -51,7 +54,7 @@ export default function MyScreen() {
         <Divider />
         <ListRow title="알림 · 공개 · 개인정보 설정" onPress={() => router.push('/settings')} />
       </Surface>
-      {ranked.length === 0 ? <><SectionTitle title="공식 랭킹 트랙" /><EmptyState title="활성 랭킹 트랙이 없습니다" body="공개 자격과 실제 집계 데이터가 준비된 트랙만 이곳에 표시됩니다." action="랭킹 보기" onAction={() => router.navigate('/(tabs)/rankings')} /></> : null}
+      {rankingTrack ? <><SectionTitle title="공식 랭킹 트랙" /><Surface style={{ gap: spacing.sm }}><AppText variant="bodyStrong">{rankingTrack.strategyName}</AppText><View style={styles.metrics}><Metric label="누적 수익률" value={formatRate(rankingTrack.returnRate)} tone={rankingTrack.returnRate >= 0 ? 'positive' : 'negative'} /><Metric label="최대 낙폭" value={formatRate(rankingTrack.maxDrawdown)} tone="negative" /><Metric label="완료 매매" value={`${rankingTrack.tradeCount}건`} /></View><Button kind="danger" label="공식 랭킹 트랙 종료" onPress={() => Alert.alert('트랙 종료', '종료하면 이 트랙은 다시 시작할 수 없으며 재시작 제한이 적용됩니다.', [{ text: '취소', style: 'cancel' }, { text: '종료', style: 'destructive', onPress: () => { void endRemoteRankingTrack().then(() => setRankingTrack(null)).catch((error: unknown) => Alert.alert('종료 실패', error instanceof Error ? error.message : '잠시 뒤 다시 시도하세요.')); } }])} /></Surface></> : <><SectionTitle title="공식 랭킹 트랙" /><EmptyState title="활성 랭킹 트랙이 없습니다" body="확정 전략 상세에서 공식 랭킹을 시작할 수 있습니다." action="내 전략 보기" onAction={() => router.navigate('/(tabs)/create')} /></>}
     </Screen>
   );
 }

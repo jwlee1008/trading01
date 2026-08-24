@@ -4,6 +4,7 @@ import com.signallab.api.global.web.ApiEnvelope;
 import com.signallab.api.global.web.CurrentUser;
 import com.signallab.api.global.health.service.DatabaseHealthService;
 import com.signallab.api.domain.profile.service.ProfileReportService;
+import com.signallab.api.domain.profile.service.ProfileSettingsService;
 import com.signallab.domain.profile.entity.Profile;
 import com.signallab.domain.profile.repository.ProfileRepository;
 import org.springframework.web.bind.annotation.*;
@@ -18,12 +19,14 @@ public class ProfileController {
     private final ProfileRepository profileRepository;
     private final DatabaseHealthService databaseHealthService;
     private final ProfileReportService profileReportService;
+    private final ProfileSettingsService profileSettingsService;
 
     public ProfileController(ProfileRepository profileRepository, DatabaseHealthService databaseHealthService,
-                             ProfileReportService profileReportService) {
+                             ProfileReportService profileReportService, ProfileSettingsService profileSettingsService) {
         this.profileRepository = profileRepository;
         this.databaseHealthService = databaseHealthService;
         this.profileReportService = profileReportService;
+        this.profileSettingsService = profileSettingsService;
     }
 
     @GetMapping("/profiles/{userId}/public")
@@ -37,10 +40,22 @@ public class ProfileController {
     @PutMapping("/me/visibility")
     public Map<String, Object> updateVisibility(
         @CurrentUser String userId,
-        @RequestBody VisibilityRequest request
+        @RequestBody ProfileSettingsService.SettingsRequest request
     ) {
-        profileRepository.updateVisibility(parseUserId(userId), request.isPublic());
-        return ApiEnvelope.ok(null, databaseHealthService.isPostgres());
+        return ApiEnvelope.ok(profileSettingsService.update(parseUserId(userId), request), databaseHealthService.isPostgres());
+    }
+
+    @GetMapping("/me/settings")
+    public Map<String, Object> settings(@CurrentUser String userId) {
+        return ApiEnvelope.ok(profileSettingsService.settings(parseUserId(userId)), databaseHealthService.isPostgres());
+    }
+
+    @PutMapping("/me/universe")
+    public Map<String, Object> selectUniverse(
+        @CurrentUser String userId,
+        @RequestBody ProfileSettingsService.UniversePreferenceRequest request
+    ) {
+        return ApiEnvelope.ok(profileSettingsService.selectUniverse(parseUserId(userId), request), databaseHealthService.isPostgres());
     }
 
     @PostMapping("/profiles/{userId}/reports")
@@ -63,5 +78,4 @@ public class ProfileController {
         }
     }
 
-    public record VisibilityRequest(boolean isPublic) {}
 }

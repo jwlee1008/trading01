@@ -48,35 +48,46 @@ public class MarketDataImportService {
 
     /** Idempotent catch-up used by the long-running Worker. Provider calls occur only when the latest session is missing. */
     public synchronized Report automaticTop10Refresh(WorkerProperties properties) {
+        return automaticRefresh(properties);
+    }
+
+    /** Catches up every active KOSPI/KOSDAQ instrument in bounded batches so broad universes stay current. */
+    public synchronized Report automaticRefresh(WorkerProperties properties) {
         KiwoomMarketDataProvider provider = providerFactory.create(properties);
         LocalDate through = provider.latestCompletedSession();
-        if (automaticDataReady(through)) return new Report("automatic-top10-up-to-date", 10, 0, 0, 0);
-
-        Integer eligible = jdbc.queryForObject("""
-            SELECT count(*) FROM instruments WHERE market='KOSPI' AND kind='COMMON' AND delisted_on IS NULL
-              AND is_managed=false AND is_trade_suspended=false
-            """, Integer.class);
-        if (eligible == null || eligible < 10) importInstruments(properties);
+        upsertMarketSessions(provider, through.plusDays(1), through.plusDays(14), properties.isBackfillDryRun());
+        Integer eligible = jdbc.queryForObject("SELECT count(*) FROM instruments WHERE delisted_on IS NULL", Integer.class);
+        if (eligible == null || eligible == 0) importInstruments(properties);
+        int batchSize = properties.getMarketDataAutoBatchSize();
+        if (batchSize < 1 || batchSize > 500) throw new IllegalArgumentException("WORKER_MARKET_DATA_AUTO_BATCH_SIZE must be within 1..500");
+        List<String> missing = jdbc.query("""
+            SELECT i.symbol FROM instruments i WHERE i.delisted_on IS NULL AND i.is_trade_suspended=false
+              AND NOT EXISTS (SELECT 1 FROM candles c WHERE c.instrument_id=i.id AND c.timeframe='D1'
+                              AND c.session_date=? AND c.is_final AND NOT c.is_stale)
+            ORDER BY EXISTS(SELECT 1 FROM candles prior WHERE prior.instrument_id=i.id) DESC,i.symbol
+            LIMIT ?
+            """, (rs, index) -> rs.getString(1), through, batchSize);
+        if (missing.isEmpty()) return new Report("automatic-market-data-up-to-date", eligible == null ? 0 : eligible, 0, 0, 0);
 
         String previousFrom = properties.getMarketDataFrom();
         String previousThrough = properties.getMarketDataThrough();
-        String previousAsOf = properties.getTop100AsOf();
+        String previousSymbols = properties.getMarketDataSymbols();
         int previousMaxInstruments = properties.getBackfillMaxInstruments();
         try {
-            Integer kiwoomCandles = jdbc.queryForObject("SELECT count(*) FROM candles WHERE provider='kiwoom'", Integer.class);
-            boolean initialHistory = kiwoomCandles == null || kiwoomCandles < 2_000;
-            properties.setTop100AsOf(through.toString());
+            boolean includesNewInstrument = Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM instruments i WHERE i.symbol=ANY(string_to_array(?,','))
+                  AND NOT EXISTS(SELECT 1 FROM candles c WHERE c.instrument_id=i.id))
+                """, Boolean.class, String.join(",", missing)));
             properties.setMarketDataThrough(through.toString());
-            properties.setMarketDataFrom((initialHistory ? through.minusYears(1) : through.minusDays(14)).toString());
-            properties.setBackfillMaxInstruments(10);
-            Report universe = refreshKospiTop10(properties);
-            Report candles = backfillCandlesForTop10(properties);
-            return new Report("automatic-top10-refreshed", universe.instruments(), candles.candles(),
-                candles.gaps(), universe.invalid() + candles.invalid());
+            properties.setMarketDataFrom((includesNewInstrument ? through.minusYears(3) : through.minusDays(14)).toString());
+            properties.setMarketDataSymbols(String.join(",", missing));
+            properties.setBackfillMaxInstruments(batchSize);
+            Report candles = backfillCandles(properties);
+            return new Report("automatic-market-data-refreshed", candles.instruments(), candles.candles(), candles.gaps(), candles.invalid());
         } finally {
             properties.setMarketDataFrom(previousFrom);
             properties.setMarketDataThrough(previousThrough);
-            properties.setTop100AsOf(previousAsOf);
+            properties.setMarketDataSymbols(previousSymbols);
             properties.setBackfillMaxInstruments(previousMaxInstruments);
         }
     }

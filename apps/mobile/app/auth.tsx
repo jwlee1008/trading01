@@ -6,15 +6,16 @@ import { APP_NAME } from '@/data/catalog';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAppStore } from '@/store/useAppStore';
 
-type AuthMode = 'sign-in' | 'sign-up';
+type AuthMode = 'sign-in' | 'sign-up' | 'reset-request' | 'update-password';
 
 export default function AuthScreen() {
-  const { origin } = useLocalSearchParams<{ origin?: string }>();
+  const params = useLocalSearchParams<{ origin?: string; mode?: AuthMode }>();
+  const { origin } = params;
   const { colors } = useSignalTheme();
   const auth = useAuth();
   const hasSeenOnboarding = useAppStore((state) => state.hasSeenOnboarding);
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
-  const [mode, setMode] = useState<AuthMode>('sign-in');
+  const [mode, setMode] = useState<AuthMode>(params.mode === 'update-password' ? 'update-password' : 'sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
@@ -41,12 +42,21 @@ export default function AuthScreen() {
     setError(null);
     setMessage(null);
     const cleanEmail = email.trim();
-    if (!cleanEmail.includes('@')) return setError('이메일 주소를 확인하세요.');
-    if (password.length < 6) return setError('비밀번호는 6자 이상 입력하세요.');
+    if (mode !== 'update-password' && !cleanEmail.includes('@')) return setError('이메일 주소를 확인하세요.');
+    if (mode !== 'reset-request' && password.length < 8) return setError('비밀번호는 8자 이상 입력하세요.');
     if (mode === 'sign-up' && nickname.trim().length < 2) return setError('닉네임은 2자 이상 입력하세요.');
     setBusy(true);
     try {
-      if (mode === 'sign-in') {
+      if (mode === 'reset-request') {
+        await auth.requestPasswordReset(cleanEmail);
+        setMode('sign-in');
+        setMessage('비밀번호 재설정 메일을 보냈습니다. 메일의 링크를 열어 새 비밀번호를 설정하세요.');
+      } else if (mode === 'update-password') {
+        await auth.updatePassword(password);
+        setMode('sign-in');
+        setPassword('');
+        setMessage('비밀번호를 변경했습니다. 새 비밀번호로 로그인하세요.');
+      } else if (mode === 'sign-in') {
         await auth.signIn(cleanEmail, password);
         finish();
       } else {
@@ -73,7 +83,7 @@ export default function AuthScreen() {
         <AppText variant="bodyStrong">{APP_NAME}</AppText>
       </View>
       <View style={styles.heading}>
-        <AppText variant="hero">{mode === 'sign-in' ? '로그인' : '회원가입'}</AppText>
+        <AppText variant="hero">{mode === 'sign-in' ? '로그인' : mode === 'sign-up' ? '회원가입' : mode === 'reset-request' ? '비밀번호 찾기' : '새 비밀번호 설정'}</AppText>
         <AppText tone="muted">전략·신호·포트폴리오를 계정에 안전하게 연결합니다.</AppText>
       </View>
       {!auth.configured ? <Banner tone="negative" title="Supabase 환경 변수 없음" body="로그인과 데이터 저장을 사용할 수 없습니다. 공개 URL과 publishable key를 설정하세요." /> : null}
@@ -82,15 +92,16 @@ export default function AuthScreen() {
       {error ? <Banner tone="negative" title="인증 실패" body={error} /> : null}
       <Surface style={styles.form}>
         {mode === 'sign-up' ? <Field label="닉네임" value={nickname} onChangeText={setNickname} autoCapitalize="none" maxLength={16} editable={!busy && auth.configured} /> : null}
-        <Field label="이메일" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="emailAddress" editable={!busy && auth.configured} />
-        <Field label="비밀번호" value={password} onChangeText={setPassword} secureTextEntry textContentType={mode === 'sign-in' ? 'password' : 'newPassword'} editable={!busy && auth.configured} />
-        <Button label={mode === 'sign-in' ? '로그인' : '계정 만들기'} busy={busy} disabled={!auth.configured} onPress={() => { void submit(); }} />
+        {mode !== 'update-password' ? <Field label="이메일" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="emailAddress" editable={!busy && auth.configured} /> : null}
+        {mode !== 'reset-request' ? <Field label={mode === 'update-password' ? '새 비밀번호' : '비밀번호'} value={password} onChangeText={setPassword} secureTextEntry textContentType={mode === 'sign-in' ? 'password' : 'newPassword'} editable={!busy && auth.configured} /> : null}
+        <Button label={mode === 'sign-in' ? '로그인' : mode === 'sign-up' ? '계정 만들기' : mode === 'reset-request' ? '재설정 메일 보내기' : '비밀번호 변경'} busy={busy} disabled={!auth.configured} onPress={() => { void submit(); }} />
         <Button
-          label={mode === 'sign-in' ? '처음이면 회원가입' : '계정이 있으면 로그인'}
+          label={mode === 'sign-in' ? '처음이면 회원가입' : '로그인으로 돌아가기'}
           kind="ghost"
           disabled={busy || !auth.configured}
           onPress={() => { setMode((value) => value === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setMessage(null); }}
         />
+        {mode === 'sign-in' ? <Button label="비밀번호를 잊었어요" kind="ghost" disabled={busy || !auth.configured} onPress={() => { setMode('reset-request'); setError(null); setMessage(null); }} /> : null}
       </Surface>
       <Button label={hasSeenOnboarding ? '내 화면으로 돌아가기' : '저장 없이 둘러보기'} kind="secondary" disabled={busy} onPress={useTrial} />
       <AppText variant="caption" tone="muted" style={styles.notice}>세션 저장과 갱신은 Supabase SDK가 맡습니다. service-role key는 앱에 넣지 않습니다.</AppText>

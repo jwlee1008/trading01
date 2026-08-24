@@ -11,6 +11,8 @@
     "dev:api": "node --env-file=.env scripts/run-backend.mjs api bootRun",
     "dev:worker": "node --env-file=.env scripts/run-backend.mjs worker bootRun",
     "dev:mobile": "pnpm --filter @signal/mobile dev",
+    "env:check": "node --env-file-if-exists=.env scripts/validate-env.mjs",
+    "worker:admin": "node --env-file-if-exists=.env scripts/worker-admin.mjs",
     "worker:import:calendar": "node --env-file=.env scripts/run-backend.mjs worker importCalendar",
     "worker:import:instruments": "node --env-file=.env scripts/run-backend.mjs worker importInstruments",
     "worker:refresh:kospi-top10": "node --env-file=.env scripts/run-backend.mjs worker refreshKospiTop10",

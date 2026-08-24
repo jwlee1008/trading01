@@ -32,14 +32,17 @@ docs                        제품·아키텍처·공급자 문서
 ```powershell
 pnpm install
 Copy-Item .env.example .env
-pnpm dev:api
-pnpm dev:worker
-pnpm dev:mobile
+pnpm env:check
+pnpm supabase:start
+pnpm exec supabase migration up --local
+pnpm dev
 ```
 
 API 기본 주소는 `http://localhost:3000/v1`이며 `GET /v1/health`는 공개다. API와 Worker를 함께 실행하려면 `pnpm dev`를 사용한다. Android Emulator는 `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`, 실기기는 개발 PC의 LAN 주소를 사용한다.
 
 API는 PostgreSQL과 Supabase JWT 인증만 사용한다. `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`와 Supabase 키를 설정하며, service role 키는 모바일 환경 변수에 넣지 않는다.
+
+Worker 운영 상태, 개별 작업 실행·재시도, 실제 데이터 커버리지와 공식 랭킹 집계 절차는 [P1 운영 가이드](docs/P1_OPERATIONS.md)를 따른다.
 
 Worker 한 번 실행과 시장 데이터 준비:
 

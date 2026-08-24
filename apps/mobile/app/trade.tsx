@@ -18,6 +18,7 @@ export default function TradeScreen() {
   const remoteApiReady = useRemoteApiReady();
   const params = useLocalSearchParams<{ mode?: Mode; side?: 'BUY' | 'SELL'; signalId?: string; positionId?: string; symbol?: string; name?: string; price?: string }>();
   const position = useAppStore((state) => state.positions.find((item) => item.id === params.positionId));
+  const portfolioIds = useAppStore((state) => state.portfolioIds);
   const [mode, setMode] = useState<Mode>(params.mode ?? (position?.kind === 'SANDBOX_PAPER' ? 'paper' : 'manual'));
   const [side, setSide] = useState<'BUY' | 'SELL'>(params.side ?? 'BUY');
   const [symbol, setSymbol] = useState(params.symbol ?? position?.symbol ?? '');
@@ -38,15 +39,19 @@ export default function TradeScreen() {
     setSubmitting(true);
     try {
       if (mode === 'manual') {
+        const portfolioId = portfolioIds.MANUAL_LIVE;
+        if (!portfolioId) throw new Error('실제 수동 포트폴리오를 준비하지 못했습니다. 잠시 후 다시 시도하세요.');
         await submitRemoteManualExecution({
-          positionId: position?.id ?? null, symbol, side, price: unitPrice, quantity: qty,
+          portfolioId, positionId: position?.id ?? null, symbol, side, price: unitPrice, quantity: qty,
           executedAt: `${date}T00:00:00.000Z`, signalId: params.signalId ?? null, memo,
           idempotencyKey: remoteIdempotencyKey('manual'),
         });
         Alert.alert('체결을 기록했어요', side === 'SELL' && position && qty === position.quantity ? '전량매도되어 감시를 종료합니다.' : '실제 거래를 수동 원장에 기록했습니다.');
         router.replace(position ? { pathname: '/position/[id]', params: { id: position.id } } : '/holdings');
       } else {
-        await submitRemotePaperOrder({ positionId: position?.id ?? null, symbol, side, quantity: qty, signalId: params.signalId ?? null, idempotencyKey: remoteIdempotencyKey('paper') });
+        const portfolioId = portfolioIds.SANDBOX_PAPER;
+        if (!portfolioId) throw new Error('연습 페이퍼 포트폴리오를 준비하지 못했습니다. 잠시 후 다시 시도하세요.');
+        await submitRemotePaperOrder({ portfolioId, positionId: position?.id ?? null, symbol, side, quantity: qty, signalId: params.signalId ?? null, idempotencyKey: remoteIdempotencyKey('paper') });
         Alert.alert('주문을 접수했어요', 'Worker가 다음 체결 가능 거래일의 공식 시가로 처리합니다. 체결 전 취소할 수 있습니다.');
         router.replace({ pathname: '/holdings', params: { kind: 'SANDBOX_PAPER' } });
       }

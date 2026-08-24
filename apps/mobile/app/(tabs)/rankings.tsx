@@ -28,6 +28,7 @@ export default function RankingsScreen() {
     <Screen>
       <Segmented options={[{ value: 'combination', label: '조합' }, { value: 'indicator', label: '지표 티어' }, { value: 'user', label: '사용자' }]} value={type} onChange={setType} />
       <Segmented options={[{ value: '3M', label: '3개월' }, { value: '6M', label: '6개월' }, { value: '1Y', label: '1년' }]} value={period} onChange={setPeriod} />
+      <AppText variant="caption" tone="muted">기간 시작 {data.periodStart || '미확정'} · 기준 {data.asOf ? data.asOf.slice(0, 10) : 'snapshot 없음'} · 최소 {data.minimumTrades}회 체결</AppText>
 
       {type === 'combination' ? <>
         <Banner tone="accent" title="기간별 검증 결과" body={data.disclosure || '검증이 완료된 조합 snapshot만 표시합니다.'} />

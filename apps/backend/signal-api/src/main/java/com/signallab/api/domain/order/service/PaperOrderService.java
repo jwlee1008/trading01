@@ -27,11 +27,14 @@ public class PaperOrderService {
             """
             SELECT po.id, po.portfolio_id, po.position_id, i.symbol, po.side, po.quantity,
                    COALESCE(po.source_signal_id, po.source_position_signal_id) AS signal_id, po.status,
-                   po.submitted_at, ms.session_date, cm.code AS cost_code, po.idempotency_key, po.rejection_reason
+                   po.submitted_at, ms.session_date, cm.code AS cost_code, po.idempotency_key, po.rejection_reason,
+                   latest.close estimated_close,pfm.slippage_buy_bps,pfm.spread_bps,cm.buy_fee_rate
             FROM paper_orders po
             JOIN instruments i ON i.id = po.instrument_id
             JOIN market_sessions ms ON ms.id = po.scheduled_market_session_id
             JOIN cost_model_versions cm ON cm.id = po.cost_model_version_id
+            JOIN paper_fill_model_versions pfm ON pfm.id=po.fill_model_version_id
+            LEFT JOIN LATERAL (SELECT close FROM candles c WHERE c.instrument_id=po.instrument_id AND c.is_final AND NOT c.is_stale ORDER BY c.session_date DESC LIMIT 1) latest ON true
             WHERE po.user_id = ? ORDER BY po.submitted_at DESC
             """, (rs, rowNum) -> response(rs), userId
         );
@@ -121,10 +124,14 @@ public class PaperOrderService {
             """
             SELECT po.id, po.portfolio_id, po.position_id, i.symbol, po.side, po.quantity,
                    COALESCE(po.source_signal_id, po.source_position_signal_id) AS signal_id, po.status,
-                   po.submitted_at, ms.session_date, cm.code AS cost_code, po.idempotency_key, po.rejection_reason
+                   po.submitted_at, ms.session_date, cm.code AS cost_code, po.idempotency_key, po.rejection_reason,
+                   latest.close estimated_close,pfm.slippage_buy_bps,pfm.spread_bps,cm.buy_fee_rate
             FROM paper_orders po JOIN instruments i ON i.id = po.instrument_id
             JOIN market_sessions ms ON ms.id = po.scheduled_market_session_id
-            JOIN cost_model_versions cm ON cm.id = po.cost_model_version_id WHERE po.id = ?
+            JOIN cost_model_versions cm ON cm.id = po.cost_model_version_id
+            JOIN paper_fill_model_versions pfm ON pfm.id=po.fill_model_version_id
+            LEFT JOIN LATERAL (SELECT close FROM candles c WHERE c.instrument_id=po.instrument_id AND c.is_final AND NOT c.is_stale ORDER BY c.session_date DESC LIMIT 1) latest ON true
+            WHERE po.id = ?
             """, (rs, rowNum) -> response(rs), orderId
         );
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다.");
@@ -133,10 +140,21 @@ public class PaperOrderService {
 
     private PaperOrderResponse response(java.sql.ResultSet rs) throws java.sql.SQLException {
         String status = rs.getString("status");
+        BigDecimal estimated = rs.getBigDecimal("estimated_close");
+        if (estimated == null) estimated = BigDecimal.ZERO;
+        if (estimated.signum() > 0 && "BUY".equals(rs.getString("side"))) {
+            BigDecimal bps = rs.getBigDecimal("slippage_buy_bps").add(rs.getBigDecimal("spread_bps").divide(BigDecimal.valueOf(2)));
+            estimated = estimated.multiply(BigDecimal.ONE.add(bps.divide(BigDecimal.valueOf(10_000), 12, java.math.RoundingMode.HALF_UP)));
+        }
+        BigDecimal reserved = BigDecimal.ZERO;
+        if ("BUY".equals(rs.getString("side")) && "PENDING".equals(status) && estimated.signum() > 0) {
+            BigDecimal gross = estimated.multiply(BigDecimal.valueOf(rs.getLong("quantity")));
+            reserved = gross.add(gross.multiply(rs.getBigDecimal("buy_fee_rate")).setScale(0, java.math.RoundingMode.CEILING));
+        }
         return new PaperOrderResponse(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("portfolio_id")), optionalUuid(rs.getString("position_id")),
             rs.getString("symbol"), rs.getString("side"), rs.getLong("quantity"), optionalUuid(rs.getString("signal_id")), status,
-            rs.getTimestamp("submitted_at").toInstant().atOffset(ZoneOffset.UTC), rs.getObject("session_date", LocalDate.class), "0",
-            "BUY".equals(rs.getString("side")) && "PENDING".equals(status) ? "0" : "0", rs.getString("cost_code"), rs.getString("idempotency_key"), rs.getString("rejection_reason"));
+            rs.getTimestamp("submitted_at").toInstant().atOffset(ZoneOffset.UTC), rs.getObject("session_date", LocalDate.class), estimated.toPlainString(),
+            reserved.toPlainString(), rs.getString("cost_code"), rs.getString("idempotency_key"), rs.getString("rejection_reason"));
     }
 
     private PortfolioRow portfolio(UUID userId, UUID portfolioId) {

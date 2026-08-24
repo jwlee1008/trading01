@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class RankingService {
+    private static final int MINIMUM_TRADES = 5;
     private static final Map<String, String> PERIODS = Map.of("3M", "M3", "6M", "M6", "1Y", "Y1");
     private final StrategyService strategyService;
     private final JdbcTemplate jdbc;
@@ -84,11 +85,14 @@ public class RankingService {
         List<Map<String, Object>> users = jdbc.query("""
             WITH eligible AS (
               SELECT rt.id, p.public_profile_id, p.nickname, rt.max_drawdown, rt.trade_count, rt.started_at,
-                     latest.nav latest_nav, base.nav base_nav
+                     rt.initial_capital,latest.nav latest_nav,latest.valuation_at latest_at,base.nav base_nav,
+                     s.name strategy_name,ud.kind::text universe_kind
               FROM ranking_tracks rt JOIN profiles p ON p.user_id=rt.user_id
-              JOIN LATERAL (SELECT nav FROM portfolio_nav_snapshots n WHERE n.ranking_track_id=rt.id ORDER BY valuation_at DESC LIMIT 1) latest ON true
+              JOIN strategy_versions sv ON sv.id=rt.strategy_version_id JOIN strategies s ON s.id=sv.strategy_id
+              JOIN universe_versions uv ON uv.id=rt.universe_version_id JOIN universe_definitions ud ON ud.id=uv.universe_definition_id
+              JOIN LATERAL (SELECT nav,valuation_at FROM portfolio_nav_snapshots n WHERE n.ranking_track_id=rt.id ORDER BY valuation_at DESC LIMIT 1) latest ON true
               JOIN LATERAL (SELECT nav FROM portfolio_nav_snapshots n WHERE n.ranking_track_id=rt.id AND valuation_at<=now()-make_interval(months => ?) ORDER BY valuation_at DESC LIMIT 1) base ON true
-              WHERE rt.is_public AND p.is_public AND p.deleted_at IS NULL
+              WHERE rt.is_public AND p.is_public AND p.deleted_at IS NULL AND rt.trade_count>=?
             ), ranked AS (
               SELECT *, (latest_nav/base_nav-1) period_return,
                      rank() over (ORDER BY (latest_nav/base_nav-1) DESC, max_drawdown DESC NULLS LAST, started_at) rank
@@ -99,22 +103,30 @@ public class RankingService {
                 returns.put("3m", "3M".equals(requested) ? rs.getBigDecimal("period_return").movePointRight(2) : 0);
                 returns.put("6m", "6M".equals(requested) ? rs.getBigDecimal("period_return").movePointRight(2) : 0);
                 returns.put("1y", "1Y".equals(requested) ? rs.getBigDecimal("period_return").movePointRight(2) : 0);
-                returns.put("all", 0);
+                returns.put("all", rs.getBigDecimal("latest_nav").divide(rs.getBigDecimal("initial_capital"), 10, java.math.RoundingMode.HALF_UP).subtract(java.math.BigDecimal.ONE).movePointRight(2));
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", rs.getString("public_profile_id")); row.put("rank", rs.getInt("rank"));
                 row.put("nickname", rs.getString("nickname")); row.put("returnRate", returns);
-                row.put("universeId", "all"); row.put("mdd", rs.getBigDecimal("max_drawdown") == null ? 0 : rs.getBigDecimal("max_drawdown").movePointRight(2));
+                row.put("universeId", universeId(rs.getString("universe_kind"))); row.put("mdd", rs.getBigDecimal("max_drawdown") == null ? 0 : rs.getBigDecimal("max_drawdown").movePointRight(2));
                 row.put("trades", rs.getInt("trade_count"));
                 row.put("days", java.time.Duration.between(rs.getTimestamp("started_at").toInstant(), java.time.Instant.now()).toDays());
-                row.put("strategyName", "공식 페이퍼 트랙"); row.put("public", true);
+                row.put("strategyName", rs.getString("strategy_name")); row.put("public", true);
+                row.put("asOf", rs.getTimestamp("latest_at").toInstant().toString());
                 return row;
-            }, months);
+            }, months, MINIMUM_TRADES);
 
-        return Map.of(
-            "period", requested, "combinations", combinations, "indicatorTiers", indicatorTiers, "users", users,
-            "disclosure", "공개된 DB ranking snapshot 기준입니다. snapshot이 없으면 빈 목록을 표시합니다.",
-            "indicatorDisclosure", "과거 데이터상 견고성 등급이며 미래 수익 예측이 아닙니다."
-        );
+        String asOf = jdbc.query("""
+            SELECT max(as_of) FROM ranking_snapshots WHERE period=?::ranking_period AND is_published
+            """, rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant().toString() : null, dbPeriod);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("period", requested); response.put("asOf", asOf);
+        response.put("periodStart", java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).minusMonths(months).toString());
+        response.put("minimumTrades", MINIMUM_TRADES);
+        response.put("combinations", combinations); response.put("indicatorTiers", indicatorTiers); response.put("users", users);
+        response.put("disclosure", "공개된 기간별 DB snapshot 기준이며 최소 " + MINIMUM_TRADES + "회 체결과 해당 기간 시작 NAV가 있는 트랙만 표시합니다.");
+        response.put("indicatorDisclosure", "과거 데이터상 견고성 등급이며 미래 수익 예측이 아닙니다.");
+        return response;
     }
 
     private JsonNode parse(String json) {
@@ -126,5 +138,13 @@ public class RankingService {
         String value = node.path(field).asText("").trim();
         if (value.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "조합 snapshot 필드가 없습니다: " + field);
         return value;
+    }
+
+    private static String universeId(String kind) {
+        return switch (kind == null ? "" : kind) {
+            case "KOSPI_200" -> "kospi200"; case "KOSDAQ_150" -> "kosdaq150";
+            case "KOSPI_TOP_10" -> "kospiTop10"; case "KOSPI_ALL" -> "kospi";
+            case "KOSDAQ_ALL" -> "kosdaq"; case "CUSTOM" -> "custom"; default -> "all";
+        };
     }
 }
