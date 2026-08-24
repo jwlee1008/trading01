@@ -55,7 +55,8 @@ public class PostgresDailySignalCycle {
                 String payload = objectMapper.writeValueAsString(Map.of(
                     "strategyVersionId", item.strategyVersionId().toString(), "symbol", item.symbol(), "candleClose", latest.sessionDate(), "type", "BUY_CONDITION"
                 ));
-                String datasetVersion = "spring-worker:db-candles:" + latest.sessionDate();
+                boolean testFixture = item.symbol().startsWith("TST");
+                String datasetVersion = (testFixture ? "local-test-fixture:" : "spring-worker:db-candles:") + latest.sessionDate();
                 BigDecimal signalStrength = BigDecimal.ONE;
                 BigDecimal priorLiquidity = BigDecimal.valueOf(candles.stream()
                     .limit(Math.max(0, candles.size() - 1L)).skip(Math.max(0, candles.size() - 21L))
@@ -79,7 +80,7 @@ public class PostgresDailySignalCycle {
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("closePrice", BigDecimal.valueOf(latest.close()));
         List<Map<String, String>> reasons = new ArrayList<>();
-        String sourceLabel = "키움 OpenAPI 일봉";
+        String sourceLabel = symbol.startsWith("TST") ? "로컬 테스트 fixture" : "키움 OpenAPI 일봉";
         evidence.put("dataSource", sourceLabel);
         reasons.add(Map.of("label", "데이터 출처", "value", sourceLabel));
         for (int index = 0; index < strategy.rules().size(); index++) {

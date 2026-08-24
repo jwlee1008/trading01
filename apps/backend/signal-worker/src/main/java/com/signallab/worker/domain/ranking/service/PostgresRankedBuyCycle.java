@@ -100,6 +100,7 @@ public class PostgresRankedBuyCycle {
               JOIN LATERAL (SELECT m.id,m.session_date,m.open_at FROM market_sessions m WHERE m.market=i.market AND m.is_trading_day
                 AND m.session_date>s.candle_close_at::date ORDER BY m.session_date LIMIT 1) ms ON true
              WHERE s.strategy_version_id=? AND s.signal_type='BUY_CONDITION' AND NOT s.data_is_stale
+               AND s.dataset_version NOT LIKE 'local-test-fixture:%'
                AND s.candle_close_at::date<=? AND NOT EXISTS(SELECT 1 FROM paper_orders po WHERE po.source_signal_id=s.id)
              ORDER BY s.candle_close_at,s.signal_strength DESC NULLS LAST,s.prior_liquidity_score DESC NULLS LAST,i.symbol
              LIMIT ?

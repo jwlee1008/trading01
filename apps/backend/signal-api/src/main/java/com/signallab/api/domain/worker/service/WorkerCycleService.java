@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WorkerCycleService {
@@ -44,14 +45,25 @@ public class WorkerCycleService {
     }
 
     public Map<String, Object> request(String taskName) {
+        return request(taskName, null);
+    }
+
+    @Transactional
+    public Map<String, Object> request(String taskName, UUID requestedBy) {
         requireTask(taskName);
+        Map<String, Object> existing = jdbc.query("""
+            SELECT id,task_name,status,run_key FROM worker_task_requests
+            WHERE task_name=? AND status IN ('PENDING','RUNNING') ORDER BY requested_at LIMIT 1
+            """, rs -> rs.next() ? Map.of("requestId", rs.getString("id"), "taskName", rs.getString("task_name"),
+                "status", rs.getString("status"), "runKey", rs.getString("run_key"), "alreadyQueued", true) : null, taskName);
+        if (existing != null) return existing;
         UUID requestId = UUID.randomUUID();
         String runKey = "manual:" + requestId;
         jdbc.update("""
-            INSERT INTO worker_task_requests(id,task_name,status,run_key)
-            VALUES (?,?,'PENDING',?)
-            """, requestId, taskName, runKey);
-        return Map.of("requestId", requestId, "taskName", taskName, "status", "PENDING", "runKey", runKey);
+            INSERT INTO worker_task_requests(id,task_name,status,requested_by,run_key)
+            VALUES (?,?,'PENDING',?,?)
+            """, requestId, taskName, requestedBy, runKey);
+        return Map.of("requestId", requestId, "taskName", taskName, "status", "PENDING", "runKey", runKey, "alreadyQueued", false);
     }
 
     public Map<String, Object> retry(UUID runId) {
@@ -98,7 +110,8 @@ public class WorkerCycleService {
             active_members AS (
               SELECT DISTINCT um.instrument_id FROM universe_memberships um
               JOIN universe_versions uv ON uv.id=um.universe_version_id
-              WHERE uv.finalized_at IS NOT NULL AND (uv.effective_to IS NULL OR uv.effective_to>=current_date)
+              WHERE uv.finalized_at IS NOT NULL AND uv.source<>'local-test-fixture'
+                AND (uv.effective_to IS NULL OR uv.effective_to>=current_date)
             )
             SELECT count(*) FROM active_members am CROSS JOIN latest l
             WHERE l.d IS NOT NULL AND NOT EXISTS (

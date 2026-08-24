@@ -56,7 +56,8 @@ public class HealthController {
               FROM universe_memberships um JOIN universe_versions uv ON uv.id=um.universe_version_id
               LEFT JOIN candles c ON c.instrument_id=um.instrument_id AND c.session_date=expected.session_date
                                   AND c.is_final AND NOT c.is_stale
-              WHERE uv.finalized_at IS NOT NULL AND (uv.effective_to IS NULL OR uv.effective_to>=current_date)
+              WHERE uv.finalized_at IS NOT NULL AND uv.source<>'local-test-fixture'
+                AND (uv.effective_to IS NULL OR uv.effective_to>=current_date)
             ) coverage
             LEFT JOIN LATERAL (SELECT close_at FROM market_sessions WHERE is_trading_day AND close_at>now()
                                ORDER BY close_at LIMIT 1) next_session ON true

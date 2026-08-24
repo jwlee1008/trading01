@@ -20,6 +20,7 @@ signal:
   gemini-api-key: ${GEMINI_API_KEY:}
   gemini-model: ${GEMINI_MODEL:gemini-3.6-flash}
   gemini-base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+  signal-test-fixture-enabled: ${SIGNAL_TEST_FIXTURE_ENABLED:false}
 
 management:
   endpoints:

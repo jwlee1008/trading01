@@ -83,6 +83,12 @@ export interface RemoteRankings {
   indicatorDisclosure: string;
 }
 
+export interface RemoteWorkerRequest {
+  requestId: string;
+  status: string;
+  alreadyQueued: boolean;
+}
+
 async function request(path: string, init?: RequestInit, options: RemoteRequestOptions = {}): Promise<unknown> {
   const baseUrl = options.baseUrl ?? configuredUrl;
   if (!baseUrl) throw new Error('API URL이 설정되지 않았습니다.');
@@ -475,6 +481,22 @@ export async function loadRemoteProviderHealth(options?: RemoteRequestOptions): 
     activeInstrumentCount: number(item['activeInstrumentCount']),
     coveredInstrumentCount: number(item['coveredInstrumentCount']),
   };
+}
+
+function workerRequestFrom(value: unknown): RemoteWorkerRequest {
+  const item = record(value);
+  if (!item || !text(item['requestId'])) throw new Error('데이터 갱신 요청 응답이 올바르지 않습니다.');
+  return { requestId: text(item['requestId']), status: text(item['status']), alreadyQueued: item['alreadyQueued'] === true };
+}
+
+export async function requestRemoteMarketDataRefresh(options?: RemoteRequestOptions): Promise<RemoteWorkerRequest> {
+  return workerRequestFrom(await request('/v1/me/market-data/refresh', { method: 'POST' }, options));
+}
+
+export async function createRemoteTestSignal(options?: RemoteRequestOptions): Promise<{ symbol: string; message: string; request: RemoteWorkerRequest }> {
+  const item = record(await request('/v1/me/test-fixtures/buy-signal', { method: 'POST' }, options));
+  if (!item) throw new Error('테스트 신호 응답이 올바르지 않습니다.');
+  return { symbol: text(item['symbol']), message: text(item['message']), request: workerRequestFrom(item['workerRequest']) };
 }
 
 export async function loadRemoteRankings(period: '3M' | '6M' | '1Y', options?: RemoteRequestOptions): Promise<RemoteRankings> {

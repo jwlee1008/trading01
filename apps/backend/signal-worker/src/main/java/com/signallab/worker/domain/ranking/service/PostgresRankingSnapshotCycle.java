@@ -80,7 +80,7 @@ public class PostgresRankingSnapshotCycle {
                           AND c.close_at>s.candle_close_at ORDER BY c.session_date LIMIT 1) entry ON true
             JOIN LATERAL (SELECT c.close,c.session_date FROM candles c WHERE c.instrument_id=s.instrument_id AND c.is_final AND NOT c.is_stale
                           AND c.session_date>=entry.session_date ORDER BY c.session_date OFFSET 19 LIMIT 1) exit ON true
-            WHERE s.candle_close_at>=? AND NOT s.data_is_stale
+            WHERE s.candle_close_at>=? AND NOT s.data_is_stale AND s.dataset_version NOT LIKE 'local-test-fixture:%'
             ORDER BY exit.session_date,s.id
             """, (rs, index) -> new Event(
                 UUID.fromString(rs.getString("strategy_version_id")), UUID.fromString(rs.getString("universe_version_id")),

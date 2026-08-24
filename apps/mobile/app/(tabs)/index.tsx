@@ -22,8 +22,8 @@ export default function HomeScreen() {
   const openPositions = positions.filter((item) => item.status !== 'CLOSED' && item.status !== 'ARCHIVED');
   const pendingOrders = orders.filter((item) => item.status === 'PENDING');
   const strategyUniverse = new Map(strategies.map((item) => [item.id, item.universeId]));
-  const visibleSignals = signals.filter((item) => strategyUniverse.get(item.strategyId) === selectedUniverseId);
-  const visibleStrategies = strategies.filter((item) => item.universeId === selectedUniverseId);
+  const visibleSignals = signals.filter((item) => item.symbol.startsWith('TST') || strategyUniverse.get(item.strategyId) === selectedUniverseId);
+  const visibleStrategies = strategies.filter((item) => item.name.startsWith('[테스트]') || item.universeId === selectedUniverseId);
   const latestCandle = visibleSignals[0]?.candleClose;
 
   if (status.isPending) return <Screen><LoadingState label="실제 데이터 상태 확인 중" /></Screen>;

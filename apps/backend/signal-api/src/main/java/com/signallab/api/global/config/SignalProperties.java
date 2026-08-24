@@ -11,6 +11,7 @@ public class SignalProperties {
     private String geminiApiKey = "";
     private String geminiModel = "gemini-3.6-flash";
     private String geminiBaseUrl = "https://generativelanguage.googleapis.com";
+    private boolean signalTestFixtureEnabled;
 
     public String normalizedSupabaseUrl() {
         if (supabaseUrl == null || supabaseUrl.isBlank()) {
@@ -49,4 +50,6 @@ public class SignalProperties {
     public void setGeminiModel(String geminiModel) { this.geminiModel = geminiModel; }
     public String getGeminiBaseUrl() { return geminiBaseUrl; }
     public void setGeminiBaseUrl(String geminiBaseUrl) { this.geminiBaseUrl = geminiBaseUrl; }
+    public boolean isSignalTestFixtureEnabled() { return signalTestFixtureEnabled; }
+    public void setSignalTestFixtureEnabled(boolean value) { this.signalTestFixtureEnabled = value; }
 }

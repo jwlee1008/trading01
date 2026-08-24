@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, Field, Screen, SectionTitle, Surface, ToggleRow, spacing, useSignalTheme } from '@signal/ui';
 import { Segmented, TitleBlock } from '@/components/common';
 import { indicators } from '@/data/catalog';
 import { useUniverses } from '@/hooks/useUniverses';
 import type { IndicatorId } from '@/domain/types';
-import { createRemoteStrategy, loadRemoteUniverseVersions, remoteStrategyRuleLabel, remoteUniverseKind, reviseRemoteStrategy } from '@/services/connected-api';
+import { connectedApiEnabled, createRemoteStrategy, loadRemoteRankings, loadRemoteUniverseVersions, remoteStrategyRuleLabel, remoteUniverseKind, reviseRemoteStrategy } from '@/services/connected-api';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -20,6 +20,8 @@ export default function CreateScreen() {
   const strategies = useAppStore((state) => state.strategies);
   const upsertRemoteStrategy = useAppStore((state) => state.upsertRemoteStrategy);
   const universeQuery = useUniverses();
+  const tierQuery = useQuery({ queryKey: ['rankings', '3M'], queryFn: () => loadRemoteRankings('3M'), enabled: connectedApiEnabled, retry: false });
+  const tiers = new Map((tierQuery.data?.indicatorTiers ?? []).map((item) => [item.indicatorId, item.tier] as const));
   const universes = universeQuery.data ?? [];
   const params = useLocalSearchParams<{ edit?: string }>();
   const editing = strategies.find((item) => item.id === params.edit && !item.locked);
@@ -111,7 +113,7 @@ export default function CreateScreen() {
       <View style={styles.chips}>{universes.slice(0, 3).map((item) => <Chip key={item.id} label={item.name} selected={selectedUniverseId === item.id} onPress={() => setUniverse(item.id)} />)}</View>
 
       <SectionTitle title={`2. 지표 선택 ${selected.length}/5`} />
-      <Banner tone="accent" title="초보 모드" body="검증용 기본 파라미터를 보여줍니다. 저장 전 뜻과 약점을 확인하세요." />
+      <Banner tone="accent" title="지표 검증 티어" body="최근 3개월 실제 신호가 최소 30건 쌓인 지표만 S~C 티어를 표시합니다. 표본 수집 중이어도 전략 저장과 신호 계산은 가능합니다." />
       <Surface style={{ paddingVertical: 0 }}>
         {indicators.map((indicator, index) => {
           const active = selected.includes(indicator.id);
@@ -119,7 +121,7 @@ export default function CreateScreen() {
             <React.Fragment key={indicator.id}>
               <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggleIndicator(indicator.id)} style={styles.indicator}>
                 <View style={[styles.check, { borderColor: active ? colors.accent : colors.border }, active && { backgroundColor: colors.accent }]}><AppText tone={active ? 'inverse' : 'muted'}>{active ? '✓' : ''}</AppText></View>
-                <View style={{ flex: 1, gap: 3 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="bodyStrong">{indicator.name}</AppText><Chip label={indicator.tier} /></View><AppText variant="caption" tone="muted">{remoteApiReady ? remoteStrategyRuleLabel(indicator.id) : indicator.defaultRule}</AppText></View>
+                <View style={{ flex: 1, gap: 3 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="bodyStrong">{indicator.name}</AppText><Chip label={tiers.get(indicator.id) ?? '표본 수집 중'} /></View><AppText variant="caption" tone="muted">{remoteApiReady ? remoteStrategyRuleLabel(indicator.id) : indicator.defaultRule}</AppText></View>
                 <Pressable accessibilityRole="button" accessibilityLabel={`${indicator.name} 설명`} hitSlop={10} onPress={() => router.push({ pathname: '/indicator/[id]', params: { id: indicator.id } })}><AppText tone="accent">설명</AppText></Pressable>
               </Pressable>
               {index < indicators.length - 1 ? <Divider /> : null}

@@ -56,12 +56,13 @@ public class MarketDataImportService {
         KiwoomMarketDataProvider provider = providerFactory.create(properties);
         LocalDate through = provider.latestCompletedSession();
         upsertMarketSessions(provider, through.plusDays(1), through.plusDays(14), properties.isBackfillDryRun());
-        Integer eligible = jdbc.queryForObject("SELECT count(*) FROM instruments WHERE delisted_on IS NULL", Integer.class);
+        Integer eligible = jdbc.queryForObject("SELECT count(*) FROM instruments WHERE delisted_on IS NULL AND COALESCE((provider_refs->>'testFixture')::boolean,false)=false", Integer.class);
         if (eligible == null || eligible == 0) importInstruments(properties);
         int batchSize = properties.getMarketDataAutoBatchSize();
         if (batchSize < 1 || batchSize > 500) throw new IllegalArgumentException("WORKER_MARKET_DATA_AUTO_BATCH_SIZE must be within 1..500");
         List<String> missing = jdbc.query("""
             SELECT i.symbol FROM instruments i WHERE i.delisted_on IS NULL AND i.is_trade_suspended=false
+              AND COALESCE((i.provider_refs->>'testFixture')::boolean,false)=false
               AND NOT EXISTS (SELECT 1 FROM candles c WHERE c.instrument_id=i.id AND c.timeframe='D1'
                               AND c.session_date=? AND c.is_final AND NOT c.is_stale)
             ORDER BY EXISTS(SELECT 1 FROM candles prior WHERE prior.instrument_id=i.id) DESC,i.symbol
@@ -312,6 +313,7 @@ public class MarketDataImportService {
             instruments = jdbc.query("""
                 SELECT id, symbol FROM instruments
                 WHERE delisted_on IS NULL AND is_trade_suspended=false
+                  AND COALESCE((provider_refs->>'testFixture')::boolean,false)=false
                 ORDER BY symbol
                 """, (rs, index) -> new InstrumentRow(UUID.fromString(rs.getString("id")), rs.getString("symbol")));
         }
