@@ -19,7 +19,6 @@
     "worker:backfill:candles": "node --env-file=.env scripts/run-backend.mjs worker backfillCandles",
     "worker:backfill:kospi-top10": "node --env-file=.env scripts/run-backend.mjs worker backfillKospiTop10",
     "worker:prepare:market-data": "node --env-file=.env scripts/run-backend.mjs worker prepareMarketData",
-    "worker:benchmark": "node --env-file=.env scripts/run-backend.mjs worker benchmark",
     "build": "pnpm -r --if-present build",
     "build:packages": "pnpm --filter './packages/**' --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",

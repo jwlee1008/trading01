@@ -36,7 +36,7 @@ export default function UniverseScreen() {
   if (universes.length === 0) return <Screen><EmptyState title="사용 가능한 종목군이 없습니다" body="실제 종목 마스터와 종목군 버전을 먼저 준비하세요." /></Screen>;
   return (
     <Screen>
-      <TitleBlock title="어디서 신호를 찾을까요?" body="범위는 전략 버전에 고정됩니다. 나중에 바꾸면 새 버전과 랭킹 트랙을 만듭니다." />
+      <TitleBlock title="어디서 신호를 찾을까요?" body="범위는 전략 버전에 고정됩니다. 나중에 바꾸면 새 전략 버전을 만듭니다." />
       <Banner title="과거 구성 이력 사용" body="현재 지수 종목을 과거에 소급하지 않습니다. 열린 포지션은 범위에서 빠져도 청산까지 감시합니다." />
       <Surface style={{ paddingVertical: 0 }}>
         {universes.map((universe, index) => (
@@ -50,6 +50,7 @@ export default function UniverseScreen() {
         ))}
       </Surface>
       {selected === 'custom' ? <Button label="내 종목 목록 편집" kind="secondary" onPress={() => router.push('/watchlist')} /> : null}
+      {selected === 'demoTop30' ? <Button label="합성 20종목 지표 설정" kind="secondary" onPress={() => router.push('/test-top30')} /> : null}
       <Button label={saving ? '저장 중…' : origin === 'create' ? '전략 만들기로 돌아가기' : '이 범위 사용'} onPress={() => { void finish(); }} disabled={saving} />
       <AppText variant="caption" tone="muted">확정된 종목군 버전과 구성 이력을 기준으로 평가합니다.</AppText>
     </Screen>

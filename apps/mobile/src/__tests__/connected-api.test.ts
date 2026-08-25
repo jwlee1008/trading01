@@ -3,13 +3,29 @@ import {
   buildRemoteSellRuleInput,
   buildRemoteStrategyInput,
   createRemoteStrategy,
+  loadRemoteRankings,
   mapRemoteSnapshot,
   requestRemoteSignalAdvice,
   updateRemoteAlertSettings,
 } from '@/services/connected-api';
 
 describe('connected API snapshot', () => {
-  it('maps API strategy, signal, portfolio, position, and order data', () => {
+  it('maps public strategies attached to ranked users', async () => {
+    const fetcher = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ data: {
+      period: '3M', minimumTrades: 1,
+      users: [{
+        id: '11111111-1111-1111-1111-111111111111', rank: 1, nickname: '테스터',
+        returnRate: { '3m': 12.5, '6m': 0, '1y': 0, all: 12.5 }, trades: 2, days: 10, public: true,
+        strategies: [{ id: 'sv-public', strategyId: 's-public', name: 'RSI 전략', version: 2, universeKind: 'KOSPI_200', indicatorIds: ['RSI', 'MACD'], conditionMode: 'ALL' }],
+      }],
+    } }) } as Response)) as unknown as jest.MockedFunction<typeof fetch>;
+
+    const rankings = await loadRemoteRankings('3M', { fetcher, baseUrl: 'https://api.test' });
+
+    expect(rankings.users[0]).toMatchObject({ nickname: '테스터', strategies: [{ id: 'sv-public', name: 'RSI 전략', universeId: 'kospi200', indicatorIds: ['rsi', 'macd'], conditionMode: 'ALL' }] });
+  });
+
+  it('maps API strategy, signal, and manual portfolio data', () => {
     const snapshot = mapRemoteSnapshot({
       strategies: [{
         id: 'sv-1', name: '교차 전략', version: 2, universeVersionId: 'kospi200-v1',
@@ -23,27 +39,29 @@ describe('connected API snapshot', () => {
         status: 'ACTIVE', stale: false, reasons: [{ label: '종가', value: '71,000' }],
       }],
       portfolios: [{
-        id: 'pf-sandbox', kind: 'SANDBOX_PAPER', cash: '9000000', positions: [{
+        id: 'pf-manual', kind: 'MANUAL_LIVE', cash: '0', positions: [{
           id: 'pos-1', symbol: '005930', name: '삼성전자', quantity: '10', averagePrice: '70000',
-          currentPrice: '71000', highestClose: '72000', status: 'OPEN',
-          openedAt: '2026-08-14T00:00:00.000Z', linkedSignalId: 'sig-1',
+          currentPrice: '71000', marketPriceAvailable: true, highestClose: '72000', status: 'OPEN',
+          openedAt: '2026-08-14T00:00:00.000Z', linkedSignalId: 'sig-1', realizedPnl: '40000',
+          executions: [
+            { id: 'ex-buy', side: 'BUY', price: '70000', quantity: '10', fee: '0', tax: '0', executedAt: '2026-08-14T00:00:00.000Z', memo: '첫 매수' },
+            { id: 'ex-sell', side: 'SELL', price: '74000', quantity: '10', fee: '0', tax: '0', executedAt: '2026-08-15T00:00:00.000Z', memo: '전량 매도' },
+          ],
         }],
-      }],
-      orders: [{
-        id: 'ord-1', portfolioId: 'pf-sandbox', side: 'SELL', symbol: '005930', quantity: 5,
-        estimatedPrice: 71000, reservedCash: 0, status: 'PENDING',
-        submittedAt: '2026-08-15T00:00:00.000Z', scheduledSession: '2026-08-18',
-        signalId: 'sig-1', positionId: 'pos-1',
       }],
     });
 
     expect(snapshot.strategies[0]).toMatchObject({ id: 'sv-1', remoteStrategyId: 'strategy-1', universeId: 'kospi200', indicatorIds: ['sma'] });
     expect(snapshot.strategyHistory).toEqual([]);
     expect(snapshot.signals[0]).toMatchObject({ id: 'sig-1', symbol: '005930', closePrice: 71000 });
-    expect(snapshot.positions[0]).toMatchObject({ id: 'pos-1', kind: 'SANDBOX_PAPER', quantity: 10 });
-    expect(snapshot.orders[0]).toMatchObject({ id: 'ord-1', side: 'SELL', positionId: 'pos-1' });
-    expect(snapshot.portfolioIds).toEqual({ SANDBOX_PAPER: 'pf-sandbox' });
-    expect(snapshot.sandboxCash).toBe(9000000);
+    expect(snapshot.positions[0]).toMatchObject({
+      id: 'pos-1', kind: 'MANUAL_LIVE', quantity: 10, realizedProfit: 40000, marketPriceAvailable: true,
+      executions: [
+        { id: 'ex-buy', side: 'BUY', price: 70000, quantity: 10, memo: '첫 매수' },
+        { id: 'ex-sell', side: 'SELL', price: 74000, quantity: 10, memo: '전량 매도' },
+      ],
+    });
+    expect(snapshot.portfolioIds).toEqual({ MANUAL_LIVE: 'pf-manual' });
   });
 
   it('drops unknown rows and defaults optional values safely', () => {
@@ -51,10 +69,9 @@ describe('connected API snapshot', () => {
       strategies: [null],
       signals: [{ id: 'sell', type: 'SELL_CONDITION' }],
       portfolios: [{ id: 'bad', kind: 'UNKNOWN', positions: [] }],
-      orders: [{ id: 'bad', portfolioId: 'bad', status: 'PENDING' }],
     });
 
-    expect(snapshot).toEqual({ strategies: [], strategyHistory: [], signals: [], positions: [], orders: [], portfolioIds: {}, sandboxCash: 0, rankingTrack: null });
+    expect(snapshot).toEqual({ strategies: [], strategyHistory: [], signals: [], positions: [], portfolioIds: {} });
   });
 
   it('keeps latest remote strategy and moves prior versions to history', () => {
@@ -63,28 +80,29 @@ describe('connected API snapshot', () => {
         { id: 'sv-1', strategyId: 's-1', version: 1, name: 'v1', universeVersionId: 'uv-all-202608', rules: [{ indicatorId: 'RSI' }] },
         { id: 'sv-2', strategyId: 's-1', version: 2, name: 'v2', universeVersionId: 'uv-all-202608', rules: [{ indicatorId: 'MACD' }] },
       ],
-      signals: [], portfolios: [], orders: [],
+      signals: [], portfolios: [],
     });
 
     expect(snapshot.strategies.map((item) => item.id)).toEqual(['sv-2']);
     expect(snapshot.strategyHistory.map((item) => item.id)).toEqual(['sv-1']);
   });
 
-  it('keeps KOSPI all and KOSPI top 10 as distinct universe identities', () => {
+  it('keeps KOSPI all, top 10, and test top 30 as distinct universe identities', () => {
     const snapshot = mapRemoteSnapshot({
       strategies: [
         { id: 'sv-all', strategyId: 's-all', universeVersionId: 'uuid-all', universeKind: 'KOSPI_ALL', rules: [] },
         { id: 'sv-top10', strategyId: 's-top10', universeVersionId: 'uuid-top10', universeKind: 'KOSPI_TOP_10', rules: [] },
+        { id: 'sv-demo30', strategyId: 's-demo30', universeVersionId: 'uuid-demo30', universeKind: 'DEMO_TOP_30', rules: [] },
       ],
-      signals: [], portfolios: [], orders: [],
+      signals: [], portfolios: [],
     });
 
-    expect(snapshot.strategies.map((item) => item.universeId)).toEqual(['kospi', 'kospiTop10']);
+    expect(snapshot.strategies.map((item) => item.universeId)).toEqual(['kospi', 'kospiTop10', 'demoTop30']);
   });
 
   it('maps sell-condition signal to position-bound alert', () => {
     const snapshot = mapRemoteSnapshot({
-      strategies: [], portfolios: [], orders: [],
+      strategies: [], portfolios: [],
       signals: [{
         id: 'sell-1', type: 'SELL_CONDITION', positionId: 'pos-1', symbol: '005930', name: '삼성전자',
         candleClose: '2026-08-15T06:30:00.000Z', status: 'ACTIVE', stale: true,

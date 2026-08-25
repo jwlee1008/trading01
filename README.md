@@ -7,7 +7,7 @@
 ```text
 apps/mobile                 Expo Router 모바일 앱
 apps/backend/signal-api     Spring Boot REST /v1 API
-apps/backend/signal-worker  시세 수집, 신호, outbox, 페이퍼 체결, 랭킹 배치
+apps/backend/signal-worker  시세 수집, 신호, outbox 배치
 apps/backend/signal-domain  API와 Worker 공용 Java 도메인
 packages/api-client         모바일용 API 타입과 fetch client
 packages/config             브랜드, feature flag, entitlement
@@ -123,7 +123,6 @@ pnpm worker:prepare:market-data
 ```powershell
 pnpm check:spring-api
 pnpm check:spring-worker
-pnpm worker:benchmark
 pnpm lint
 pnpm typecheck
 pnpm test:run

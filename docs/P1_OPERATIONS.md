@@ -38,14 +38,10 @@ pnpm worker:admin retry <run-id>
 
 1. `market-data`: 종목·거래일·완성 일봉 수집
 2. `signal`: 확정 전략의 false→true 매수 조건 평가
-3. `ranking-snapshot`: 실제 신호 후행 수익률로 3M/6M/1Y 조합·지표 집계
-4. `ranked-buy`: 공식 랭킹 트랙 매수 주문 생성
-5. `sell-signal`: 손절·익절·추적·기간·기술 청산 평가
-6. `paper-fill`: 다음 거래일 시가 기준 비용·슬리피지 포함 가상 체결
-7. `ranking-nav`: 완성 종가 기준 공식 트랙 NAV/MDD/완료 매매 갱신
-8. `notification`: outbox 알림 전송
+4. `sell-signal`: 손절·익절·추적·기간·기술 청산 상태 평가
+5. `notification`: outbox 알림 전송
 
-`WORKER_RANKING_SNAPSHOT_ENABLED`와 `WORKER_RANKING_NAV_ENABLED`는 데이터 검증 뒤 활성화한다. 랭킹 조합은 최소 30개 신호, 사용자 랭킹은 기간 내 실제 SELL 체결 최소 5건을 충족해야 노출된다.
+테스트 기간의 사용자 랭킹은 공개 프로필에 기간 내 `MANUAL_LIVE` 체결 입력이 1건이라도 있으면 노출되며, SELL 기록 전 수익률은 0%다.
 
 ## 출시 전 점검
 

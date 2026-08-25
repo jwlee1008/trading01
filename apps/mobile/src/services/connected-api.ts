@@ -1,5 +1,5 @@
-import type { RankingTrack, RemoteSnapshot } from '@/domain/remote';
-import type { AppAlert, CombinationRank, IndicatorId, PaperOrder, PortfolioKind, Position, SellRule, SignalAdvice, Strategy, UniverseId, UserRank } from '@/domain/types';
+import type { RemoteSnapshot } from '@/domain/remote';
+import type { AppAlert, IndicatorId, PortfolioKind, Position, PublicStrategySummary, SellRule, SignalAdvice, Strategy, UniverseId, UserRank } from '@/domain/types';
 import { getApiAccessToken, refreshApiAccessToken, supabaseConfigured } from '@/services/supabase';
 
 type JsonRecord = Record<string, unknown>;
@@ -76,11 +76,8 @@ export interface RemoteRankings {
   asOf: string | null;
   periodStart: string;
   minimumTrades: number;
-  combinations: CombinationRank[];
-  indicatorTiers: Array<{ indicatorId: IndicatorId; name: string; tier: string; score: number }>;
   users: UserRank[];
   disclosure: string;
-  indicatorDisclosure: string;
 }
 
 export interface RemoteWorkerRequest {
@@ -145,16 +142,18 @@ function indicatorId(value: unknown): IndicatorId | null {
 
 function universeId(value: unknown): UniverseId {
   const key = text(value).toLowerCase();
-  if (key.includes('kospi_top_10') || key.includes('kospi-top-10') || key.includes('kospitop10')) return 'kospiTop10';
-  if (key.includes('kospi200')) return 'kospi200';
-  if (key.includes('kosdaq150')) return 'kosdaq150';
-  if (key.includes('kosdaq')) return 'kosdaq';
-  if (key.includes('kospi')) return 'kospi';
+  const normalized = key.replace(/[^a-z0-9]/g, '');
+  if (normalized.includes('demotop30')) return 'demoTop30';
+  if (normalized.includes('kospitop10')) return 'kospiTop10';
+  if (normalized.includes('kospi200')) return 'kospi200';
+  if (normalized.includes('kosdaq150')) return 'kosdaq150';
+  if (normalized.includes('kosdaq')) return 'kosdaq';
+  if (normalized.includes('kospi')) return 'kospi';
   return 'all';
 }
 
 function portfolioKind(value: unknown): PortfolioKind | null {
-  return value === 'MANUAL_LIVE' || value === 'SANDBOX_PAPER' || value === 'RANKED_PAPER' ? value : null;
+  return value === 'MANUAL_LIVE' ? value : null;
 }
 
 function ruleIndicatorIds(value: unknown): IndicatorId[] {
@@ -185,18 +184,7 @@ function strategyFrom(value: unknown): Strategy | null {
   };
 }
 
-function rankingTrackFrom(value: unknown): RankingTrack | null {
-  const item = record(value);
-  if (!item || !text(item['id'])) return null;
-  return {
-    id: text(item['id']), strategyVersionId: text(item['strategyVersionId']), portfolioId: text(item['portfolioId']),
-    strategyName: text(item['strategyName']), initialCapital: number(item['initialCapital']),
-    returnRate: number(item['returnRate']), maxDrawdown: number(item['maxDrawdown']), tradeCount: number(item['tradeCount']),
-    isPublic: item['isPublic'] === true, startedAt: text(item['startedAt']),
-  };
-}
-
-export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown; portfolios: unknown; orders: unknown; alerts?: unknown; alertSettings?: unknown; profileSettings?: unknown; rankingTrack?: unknown }): RemoteSnapshot {
+export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown; portfolios: unknown; alerts?: unknown; alertSettings?: unknown; profileSettings?: unknown }): RemoteSnapshot {
   const allStrategies = array(input.strategies).map(strategyFrom).filter((item): item is Strategy => item !== null);
   const strategyGroups = new Map<string, Strategy[]>();
   for (const strategy of allStrategies) {
@@ -238,53 +226,40 @@ export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown
     }];
   });
   const positions: Position[] = [];
-  const kindByPortfolio = new Map<string, PortfolioKind>();
   const portfolioIds: Partial<Record<PortfolioKind, string>> = {};
-  const instrumentNames = new Map(signals.map((signal) => [signal.symbol, signal.instrumentName] as const));
-  let sandboxCash = 0;
   for (const value of array(input.portfolios)) {
     const portfolio = record(value);
     if (!portfolio) continue;
     const kind = portfolioKind(portfolio['kind']);
     const portfolioId = text(portfolio['id']);
     if (!kind) continue;
-    kindByPortfolio.set(portfolioId, kind);
     portfolioIds[kind] = portfolioId;
-    if (kind === 'SANDBOX_PAPER') sandboxCash = number(portfolio['cash']);
     for (const rawPosition of array(portfolio['positions'])) {
       const item = record(rawPosition);
       if (!item) continue;
       const symbol = text(item['symbol']);
-      instrumentNames.set(symbol, text(item['name'], symbol));
       const status = text(item['status']);
+      const executions = array(item['executions']).flatMap((rawExecution): Position['executions'] => {
+        const execution = record(rawExecution);
+        if (!execution || (execution['side'] !== 'BUY' && execution['side'] !== 'SELL')) return [];
+        return [{
+          id: text(execution['id']), side: execution['side'], price: number(execution['price']),
+          quantity: number(execution['quantity']), fee: number(execution['fee']), tax: number(execution['tax']),
+          executedAt: text(execution['executedAt']), memo: text(execution['memo']),
+        }];
+      });
       positions.push({
         id: text(item['id']), kind, symbol, instrumentName: text(item['name'], symbol),
         quantity: number(item['quantity']), averagePrice: number(item['averagePrice']), currentPrice: number(item['currentPrice']),
+        marketPriceAvailable: item['marketPriceAvailable'] === true,
         status: ['OPEN', 'EXIT_PENDING', 'PARTIALLY_CLOSED', 'CLOSED', 'ARCHIVED'].includes(status) ? status as Position['status'] : 'OPEN',
         firstBoughtAt: text(item['openedAt']).slice(0, 10), highestClose: number(item['highestClose']),
+        realizedProfit: number(item['realizedPnl']),
         signalId: typeof item['linkedSignalId'] === 'string' ? item['linkedSignalId'] : null,
-        strategyVersion: null, executions: [], sellRule: null,
+        strategyVersion: null, executions, sellRule: null,
       });
     }
   }
-  const orders = array(input.orders).flatMap((value): PaperOrder[] => {
-    const item = record(value);
-    if (!item) return [];
-    const kind = kindByPortfolio.get(text(item['portfolioId']));
-    if (kind !== 'SANDBOX_PAPER' && kind !== 'RANKED_PAPER') return [];
-    const symbol = text(item['symbol']);
-    const status = text(item['status']);
-    if (!['PENDING', 'FILLED', 'CANCELLED', 'REJECTED', 'EXPIRED'].includes(status)) return [];
-    return [{
-      id: text(item['id']), kind, side: item['side'] === 'SELL' ? 'SELL' : 'BUY', symbol,
-      instrumentName: instrumentNames.get(symbol) ?? symbol, quantity: number(item['quantity']),
-      estimatedPrice: number(item['estimatedPrice']), status: status as PaperOrder['status'],
-      createdAt: text(item['submittedAt']), scheduledSession: text(item['scheduledSession']),
-      reservedAmount: number(item['reservedCash']), signalId: typeof item['signalId'] === 'string' ? item['signalId'] : null,
-      positionId: typeof item['positionId'] === 'string' ? item['positionId'] : null,
-      rejectReason: typeof item['rejectionReason'] === 'string' ? item['rejectionReason'] : null,
-    }];
-  });
   const alertSettings = record(input.alertSettings);
   const profileSettings = record(input.profileSettings);
   const remoteAlerts = input.alerts === undefined ? undefined : array(input.alerts).flatMap((value): AppAlert[] => {
@@ -301,8 +276,7 @@ export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown
     ? undefined
     : [...(remoteAlerts ?? []), ...sellSignalAlerts];
   return {
-    strategies, strategyHistory, signals, positions, orders, portfolioIds, sandboxCash,
-    rankingTrack: rankingTrackFrom(input.rankingTrack),
+    strategies, strategyHistory, signals, positions, portfolioIds,
     ...(alerts ? { alerts } : {}),
     ...(alertSettings ? {
       notificationsEnabled: alertSettings['enabled'] === true,
@@ -311,7 +285,6 @@ export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown
     ...(profileSettings ? {
       nickname: text(profileSettings['nickname']),
       profilePublic: profileSettings['isPublic'] === true,
-      delayedPositionPublic: profileSettings['discloseOpenPositions'] === true,
       ...(typeof profileSettings['selectedUniverseKind'] === 'string'
         ? { selectedUniverseId: universeId(profileSettings['selectedUniverseKind']) }
         : {}),
@@ -321,27 +294,14 @@ export function mapRemoteSnapshot(input: { strategies: unknown; signals: unknown
 
 export async function loadRemoteSnapshot(fetcher: typeof fetch = fetch): Promise<RemoteSnapshot> {
   const options = { fetcher };
-  const [strategies, signals, portfolios, orders, alerts, alertSettings, profileSettings, rankingTrack] = await Promise.all([
+  const [strategies, signals, portfolios, alerts, alertSettings, profileSettings] = await Promise.all([
     request('/v1/strategies', undefined, options), request('/v1/signals', undefined, options),
-    request('/v1/portfolios', undefined, options), request('/v1/paper-orders', undefined, options),
+    request('/v1/portfolios', undefined, options),
     request('/v1/alerts', undefined, options),
     request('/v1/alert-settings', undefined, options),
     request('/v1/me/settings', undefined, options),
-    request('/v1/me/ranking-track', undefined, options),
   ]);
-  return mapRemoteSnapshot({ strategies, signals, portfolios, orders, alerts, alertSettings, profileSettings, rankingTrack });
-}
-
-export async function startRemoteRankingTrack(strategyVersionId: string, isPublic: boolean, options?: RemoteRequestOptions): Promise<RankingTrack> {
-  const track = rankingTrackFrom(await request('/v1/ranking-tracks', {
-    method: 'POST', body: JSON.stringify({ strategyVersionId, isPublic }),
-  }, options));
-  if (!track) throw new Error('공식 랭킹 트랙 응답이 올바르지 않습니다.');
-  return track;
-}
-
-export async function endRemoteRankingTrack(options?: RemoteRequestOptions): Promise<void> {
-  await request('/v1/me/ranking-track', { method: 'DELETE' }, options);
+  return mapRemoteSnapshot({ strategies, signals, portfolios, alerts, alertSettings, profileSettings });
 }
 
 export function remoteIdempotencyKey(prefix: string): string {
@@ -349,9 +309,55 @@ export function remoteIdempotencyKey(prefix: string): string {
 }
 
 const remoteUniverseKinds: Record<UniverseId, string> = {
-  kospi200: 'KOSPI_200', kosdaq150: 'KOSDAQ_150', kospiTop10: 'KOSPI_TOP_10', kospi: 'KOSPI_ALL',
+  kospi200: 'KOSPI_200', kosdaq150: 'KOSDAQ_150', kospiTop10: 'KOSPI_TOP_10', demoTop30: 'DEMO_TOP_30', kospi: 'KOSPI_ALL',
   kosdaq: 'KOSDAQ_ALL', all: 'KR_ALL', custom: 'CUSTOM',
 };
+
+export interface TestTop30Fixture {
+  symbol: string;
+  name: string;
+  indicatorIds: string[];
+}
+
+export interface TestTop30Status {
+  ready: boolean;
+  top10: Array<{ symbol: string; name: string }>;
+  fixtures: TestTop30Fixture[];
+  universe: { id?: string; version?: number; memberCount?: number };
+}
+
+function mapTestTop30(value: unknown): TestTop30Status {
+  const item = record(value) ?? {};
+  const top10 = array(item['top10']).map((value) => record(value) ?? {});
+  const fixtures = array(item['fixtures']).map((value) => record(value) ?? {});
+  const universe = record(item['universe']) ?? {};
+  return {
+    ready: Boolean(item['ready']),
+    top10: top10.map((row) => ({ symbol: text(row['symbol']), name: text(row['name']) })),
+    fixtures: fixtures.map((row) => ({
+      symbol: text(row['symbol']), name: text(row['name']), indicatorIds: array(row['indicatorIds']).map((value) => text(value)).filter(Boolean),
+    })),
+    universe: {
+      ...(text(universe['id']) ? { id: text(universe['id']) } : {}),
+      ...(number(universe['version']) ? { version: number(universe['version']) } : {}),
+      ...(number(universe['memberCount']) ? { memberCount: number(universe['memberCount']) } : {}),
+    },
+  };
+}
+
+export async function loadTestTop30(options?: RemoteRequestOptions): Promise<TestTop30Status> {
+  return mapTestTop30(await request('/v1/me/test-top30', undefined, options));
+}
+
+export async function configureTestTop30(
+  entries: Array<{ name: string; indicatorIds: IndicatorId[] }>, options?: RemoteRequestOptions,
+): Promise<TestTop30Status> {
+  if (entries.length !== 20) throw new Error('합성 테스트 종목은 정확히 20개여야 합니다.');
+  const fixtures = entries.map((entry, index) => ({
+    slot: index + 1, name: entry.name, indicatorIds: entry.indicatorIds.map((id) => remoteIndicatorIds[id]),
+  }));
+  return mapTestTop30(await request('/v1/me/test-top30', { method: 'PUT', body: JSON.stringify({ fixtures }) }, options));
+}
 
 const remoteIndicatorIds: Record<IndicatorId, string> = {
   sma: 'SMA', ema: 'EMA', rsi: 'RSI', macd: 'MACD', bollinger: 'BOLLINGER',
@@ -506,13 +512,32 @@ export async function loadRemoteRankings(period: '3M' | '6M' | '1Y', options?: R
     period,
     asOf: typeof item['asOf'] === 'string' ? item['asOf'] : null,
     periodStart: text(item['periodStart']), minimumTrades: number(item['minimumTrades']),
-    combinations: array(item['combinations']) as CombinationRank[],
-    indicatorTiers: array(item['indicatorTiers']).flatMap((value) => {
-      const tier = record(value); const id = indicatorId(tier?.['indicatorId']);
-      return tier && id ? [{ indicatorId: id, name: text(tier['name']), tier: text(tier['tier']), score: number(tier['score']) }] : [];
+    users: array(item['users']).flatMap((value): UserRank[] => {
+      const user = record(value);
+      if (!user || !text(user['id'])) return [];
+      const rawReturns = record(user['returnRate']);
+      const strategies = array(user['strategies']).flatMap((raw): PublicStrategySummary[] => {
+        const strategy = record(raw);
+        if (!strategy || !text(strategy['id'])) return [];
+        return [{
+          id: text(strategy['id']), strategyId: text(strategy['strategyId']), name: text(strategy['name']),
+          version: number(strategy['version'], 1), universeId: universeId(strategy['universeKind']),
+          indicatorIds: array(strategy['indicatorIds']).map(indicatorId).filter((id): id is IndicatorId => id !== null),
+          conditionMode: strategy['conditionMode'] === 'ANY' ? 'ANY' : 'ALL',
+        }];
+      });
+      return [{
+        id: text(user['id']), rank: number(user['rank']), nickname: text(user['nickname']),
+        returnRate: {
+          '3m': number(rawReturns?.['3m']), '6m': number(rawReturns?.['6m']),
+          '1y': number(rawReturns?.['1y']), all: number(rawReturns?.['all']),
+        },
+        universeId: universeId(user['universeId']), mdd: number(user['mdd']), trades: number(user['trades']),
+        days: number(user['days']), strategyName: text(user['strategyName']), public: user['public'] === true,
+        strategies,
+      }];
     }),
-    users: array(item['users']) as UserRank[],
-    disclosure: text(item['disclosure']), indicatorDisclosure: text(item['indicatorDisclosure']),
+    disclosure: text(item['disclosure']),
   };
 }
 
@@ -531,11 +556,6 @@ export async function createRemoteStrategy(input: RemoteStrategyInput, options?:
 export async function reviseRemoteStrategy(strategyId: string, input: RemoteStrategyInput, options?: RemoteRequestOptions): Promise<Strategy> {
   const universeVersionId = await resolveRemoteUniverseVersionId(input, options);
   const data = await request(`/v1/strategies/${encodeURIComponent(strategyId)}/versions`, { method: 'POST', body: JSON.stringify(buildRemoteStrategyInput(input, universeVersionId)) }, options);
-  return requiredStrategy(data);
-}
-
-export async function copyRemoteCombination(combinationId: string, options?: RemoteRequestOptions): Promise<Strategy> {
-  const data = await request(`/v1/rankings/combinations/${encodeURIComponent(combinationId)}/copy`, { method: 'POST' }, options);
   return requiredStrategy(data);
 }
 
@@ -599,7 +619,7 @@ export async function deleteRemoteAccount(options?: RemoteRequestOptions): Promi
   await request('/v1/me', { method: 'DELETE' }, options);
 }
 
-export async function archiveRemoteStrategy(strategyId: string, options?: RemoteRequestOptions): Promise<void> {
+export async function deleteRemoteStrategy(strategyId: string, options?: RemoteRequestOptions): Promise<void> {
   await request(`/v1/strategies/${encodeURIComponent(strategyId)}`, { method: 'DELETE' }, options);
 }
 
@@ -611,13 +631,7 @@ export async function submitRemoteManualExecution(input: {
   await request(`/v1/portfolios/${encodeURIComponent(portfolioId)}/executions`, { method: 'POST', body: JSON.stringify({ ...body, price: String(input.price) }) });
 }
 
-export async function submitRemotePaperOrder(input: {
-  portfolioId: string; positionId: string | null; symbol: string; side: 'BUY' | 'SELL'; quantity: number;
-  signalId: string | null; idempotencyKey: string;
-}): Promise<void> {
-  await request('/v1/paper-orders', { method: 'POST', body: JSON.stringify(input) });
-}
-
-export async function cancelRemotePaperOrder(orderId: string): Promise<void> {
-  await request(`/v1/paper-orders/${encodeURIComponent(orderId)}/cancel`, { method: 'POST' });
+export async function copyRemotePublicStrategy(publicProfileId: string, strategyVersionId: string, options?: RemoteRequestOptions): Promise<Strategy> {
+  const data = await request(`/v1/profiles/${encodeURIComponent(publicProfileId)}/strategies/${encodeURIComponent(strategyVersionId)}/copy`, { method: 'POST' }, options);
+  return requiredStrategy(data);
 }

@@ -48,9 +48,9 @@ public class StrategyController {
     }
 
     @DeleteMapping("/{strategyId}")
-    public Map<String, Object> archive(@CurrentUser String userId, @PathVariable UUID strategyId) {
-        strategyService.archive(parseUserId(userId), strategyId);
-        return ApiEnvelope.ok(Map.of("archived", true), databaseHealthService.isPostgres());
+    public Map<String, Object> delete(@CurrentUser String userId, @PathVariable UUID strategyId) {
+        strategyService.delete(parseUserId(userId), strategyId);
+        return ApiEnvelope.ok(Map.of("deleted", true), databaseHealthService.isPostgres());
     }
 
     private UUID parseUserId(String userId) {

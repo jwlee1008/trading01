@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WorkerCycleService {
-    private static final Set<String> TASKS = Set.of("market-data", "signal", "ranking-snapshot", "ranking-nav", "ranked-buy", "sell-signal", "paper-fill", "notification");
+    private static final Set<String> TASKS = Set.of("market-data", "signal", "sell-signal", "notification");
     private final JdbcTemplate jdbc;
 
     public WorkerCycleService(JdbcTemplate jdbc) {
@@ -38,7 +38,6 @@ public class WorkerCycleService {
         state.put("runs", runs);
         state.put("requests", recentRequests());
         state.put("pendingOutbox", jdbc.queryForObject("SELECT count(*) FROM push_outbox WHERE status IN ('PENDING','FAILED')", Integer.class));
-        state.put("pendingPaperOrders", jdbc.queryForObject("SELECT count(*) FROM paper_orders WHERE status='PENDING'", Integer.class));
         state.put("latestCandleSession", jdbc.query("SELECT max(session_date) FROM candles WHERE is_final AND NOT is_stale", rs -> rs.next() && rs.getDate(1) != null ? rs.getDate(1).toLocalDate().toString() : null));
         state.put("marketDataQuality", marketDataQuality());
         return state;

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, ErrorState, ListRow, LoadingState, Metric, Screen, SectionTitle, Surface, spacing, useSignalTheme } from '@signal/ui';
 import { PositionCard, PriceChange, TitleBlock } from '@/components/common';
 import { useUniverses } from '@/hooks/useUniverses';
+import { selectHomeContent } from '@/domain/home';
 import { useProviderHealth } from '@/hooks/useProviderHealth';
 import { useAppStore } from '@/store/useAppStore';
 import { formatDateTime } from '@/utils/format';
@@ -14,16 +15,14 @@ export default function HomeScreen() {
   const signals = useAppStore((state) => state.signals);
   const strategies = useAppStore((state) => state.strategies);
   const positions = useAppStore((state) => state.positions);
-  const orders = useAppStore((state) => state.orders);
   const connectionMode = useAppStore((state) => state.connectionMode);
   const status = useProviderHealth();
   const universes = useUniverses().data ?? [];
   const universe = universes.find((item) => item.id === selectedUniverseId);
   const openPositions = positions.filter((item) => item.status !== 'CLOSED' && item.status !== 'ARCHIVED');
-  const pendingOrders = orders.filter((item) => item.status === 'PENDING');
-  const strategyUniverse = new Map(strategies.map((item) => [item.id, item.universeId]));
-  const visibleSignals = signals.filter((item) => item.symbol.startsWith('TST') || strategyUniverse.get(item.strategyId) === selectedUniverseId);
-  const visibleStrategies = strategies.filter((item) => item.name.startsWith('[테스트]') || item.universeId === selectedUniverseId);
+  const homeContent = selectHomeContent(selectedUniverseId, strategies, signals);
+  const visibleSignals = homeContent.signals;
+  const visibleStrategies = homeContent.strategies;
   const latestCandle = visibleSignals[0]?.candleClose;
 
   if (status.isPending) return <Screen><LoadingState label="실제 데이터 상태 확인 중" /></Screen>;
@@ -31,7 +30,7 @@ export default function HomeScreen() {
   return (
     <Screen>
       <TitleBlock eyebrow={latestCandle ? `${formatDateTime(latestCandle)} 완성 일봉` : '최신 완성 일봉'} title={`전략 ${visibleStrategies.length}개 · 새 신호 ${visibleSignals.length}개`} body="저장한 전략과 현재 선택한 종목 범위의 신호를 함께 표시합니다. 조건 충족은 매수 추천이 아닙니다." />
-      {connectionMode === 'offline' ? <Banner tone="negative" title="오프라인 상태" body="저장된 화면만 볼 수 있어요. 주문 전송은 막혔습니다." action="상태 확인" onAction={() => router.push('/provider-status')} /> : null}
+      {connectionMode === 'offline' ? <Banner tone="negative" title="오프라인 상태" body="저장된 화면만 볼 수 있어요. 체결 기록 전송은 막혔습니다." action="상태 확인" onAction={() => router.push('/provider-status')} /> : null}
       {status.data?.delayed ? <Banner title="데이터 지연" body={`마지막 일봉 ${status.data.lastCandleAt ?? '확인 불가'}`} action="자세히" onAction={() => router.push('/provider-status')} /> : null}
       {status.isError && connectionMode !== 'offline' ? <ErrorState onRetry={() => void status.refetch()} /> : null}
 
@@ -43,8 +42,18 @@ export default function HomeScreen() {
         <Divider />
         <View style={styles.metrics}>
           <Metric label="열린 포지션" value={`${openPositions.length}개`} />
-          <Metric label="주문 대기" value={`${pendingOrders.length}건`} tone={pendingOrders.length ? 'warning' : 'default'} />
           <Metric label="안 읽은 신호" value={`${visibleSignals.filter((item) => !item.read).length}개`} tone="accent" />
+        </View>
+        <View style={styles.tradeActions}>
+          <Button label="매수 체결 기록" kind="secondary" onPress={() => router.push('/watchlist')} />
+          <Button label="매도 체결 기록" disabled={openPositions.length === 0} onPress={() => {
+            if (openPositions.length === 1) {
+              const position = openPositions[0]!;
+              router.push({ pathname: '/trade', params: { positionId: position.id, symbol: position.symbol, name: position.instrumentName, price: String(position.currentPrice), side: 'SELL' } });
+              return;
+            }
+            router.push({ pathname: '/holdings', params: { kind: 'MANUAL_LIVE' } });
+          }} />
         </View>
       </Surface>
 
@@ -80,7 +89,7 @@ export default function HomeScreen() {
 
       <SectionTitle title="빠른 메뉴" />
       <Surface style={{ paddingVertical: 0 }}>
-        <ListRow title="신호 없이 실제 보유 등록" subtitle="앱 밖에서 산 종목도 직접 기록" onPress={() => router.push({ pathname: '/trade', params: { mode: 'manual', side: 'BUY' } })} />
+        <ListRow title="신호 없이 실제 보유 등록" subtitle="종목을 검색한 뒤 매수 체결 기록" onPress={() => router.push('/watchlist')} />
         <Divider />
         <ListRow title="종목 검색 · 관심 종목" subtitle="내 종목 목록 범위에 사용" onPress={() => router.push('/watchlist')} />
         <Divider />
@@ -94,6 +103,7 @@ const styles = StyleSheet.create({
   overview: { gap: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  tradeActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   unread: { width: 7, height: 7, borderRadius: 4 },
 });

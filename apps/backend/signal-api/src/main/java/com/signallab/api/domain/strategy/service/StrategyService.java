@@ -38,8 +38,7 @@ public class StrategyService {
         String versionsSql = """
             SELECT sv.id, sv.user_id, sv.strategy_id, sv.version, s.name, s.is_public,
                    sv.universe_version_id::text AS universe_version_id, ud.kind::text AS universe_kind,
-                   sv.root_logic, sv.notifications_enabled, sv.created_at,
-                   EXISTS (SELECT 1 FROM ranking_tracks rt WHERE rt.strategy_version_id = sv.id AND rt.status = 'ACTIVE') AS locked
+                   sv.root_logic, sv.notifications_enabled, sv.created_at, false AS locked
             FROM strategy_versions sv
             JOIN strategies s ON s.id = sv.strategy_id
             JOIN universe_versions uv ON uv.id = sv.universe_version_id
@@ -94,15 +93,6 @@ public class StrategyService {
         if (owned == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "전략을 찾을 수 없습니다.");
         }
-        Integer locked = jdbcTemplate.query(
-            """
-            SELECT 1 FROM ranking_tracks rt JOIN strategy_versions sv ON sv.id = rt.strategy_version_id
-            WHERE sv.strategy_id = ? AND rt.status = 'ACTIVE' LIMIT 1
-            """, rs -> rs.next() ? rs.getInt(1) : null, strategyId
-        );
-        if (locked != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "활성 공식 랭킹 전략은 수정할 수 없습니다.");
-        }
         UUID universeVersionId = resolveFinalizedUniverseVersion(input.universeVersionId());
         Integer latest = jdbcTemplate.queryForObject(
             "SELECT COALESCE(MAX(version), 0) FROM strategy_versions WHERE strategy_id = ? AND user_id = ?",
@@ -110,6 +100,8 @@ public class StrategyService {
         );
         try {
             jdbcTemplate.update("UPDATE strategies SET name = ?, is_public = ?, updated_at = NOW() WHERE id = ?", input.name(), input.isPublic(), strategyId);
+            jdbcTemplate.queryForObject("SELECT set_config('app.strategy_purge','on',true)", String.class);
+            deleteSignalsForStrategy(userId, strategyId);
             return createVersion(userId, strategyId, (latest == null ? 0 : latest) + 1, universeVersionId, input);
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "같은 이름의 전략이 이미 있습니다.");
@@ -117,17 +109,69 @@ public class StrategyService {
     }
 
     @Transactional
-    public void archive(UUID userId, UUID strategyId) {
-        Integer locked = jdbcTemplate.query("""
-            SELECT 1 FROM ranking_tracks rt JOIN strategy_versions sv ON sv.id=rt.strategy_version_id
-            WHERE sv.strategy_id=? AND rt.status='ACTIVE' LIMIT 1
-            """, rs -> rs.next() ? 1 : null, strategyId);
-        if (locked != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "활성 공식 랭킹 전략은 삭제할 수 없습니다.");
-        int updated = jdbcTemplate.update("""
-            UPDATE strategies SET archived_at=now(),is_public=false,updated_at=now()
-            WHERE id=? AND user_id=? AND archived_at IS NULL
+    public void delete(UUID userId, UUID strategyId) {
+        Integer owned = jdbcTemplate.query(
+            "SELECT 1 FROM strategies WHERE id = ? AND user_id = ?",
+            rs -> rs.next() ? rs.getInt(1) : null, strategyId, userId
+        );
+        if (owned == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "전략을 찾을 수 없습니다.");
+
+        // Manual trade records remain, but links to the strategy and its signals are removed.
+        jdbcTemplate.queryForObject("SELECT set_config('app.account_purge','on',true)", String.class);
+        jdbcTemplate.queryForObject("SELECT set_config('app.strategy_purge','on',true)", String.class);
+        deleteSignalsForStrategy(userId, strategyId);
+        jdbcTemplate.update("""
+            UPDATE positions SET strategy_version_id = NULL, updated_at = NOW()
+            WHERE user_id = ? AND strategy_version_id IN (
+              SELECT id FROM strategy_versions WHERE strategy_id = ?
+            )
+            """, userId, strategyId);
+        jdbcTemplate.update("""
+            UPDATE position_executions SET strategy_version_id = NULL
+            WHERE user_id = ? AND strategy_version_id IN (
+              SELECT id FROM strategy_versions WHERE strategy_id = ?
+            )
+            """, userId, strategyId);
+        jdbcTemplate.update("""
+            DELETE FROM backtest_runs
+            WHERE user_id = ? AND strategy_version_id IN (
+              SELECT id FROM strategy_versions WHERE strategy_id = ?
+            )
+            """, userId, strategyId);
+        jdbcTemplate.update("DELETE FROM strategies WHERE id = ? AND user_id = ?", strategyId, userId);
+    }
+
+    private void deleteSignalsForStrategy(UUID userId, UUID strategyId) {
+        jdbcTemplate.update("""
+            DELETE FROM push_outbox
+            WHERE signal_id IN (
+              SELECT sig.id FROM signals sig
+              JOIN strategy_versions sv ON sv.id = sig.strategy_version_id
+              WHERE sv.strategy_id = ? AND sig.user_id = ?
+            )
             """, strategyId, userId);
-        if (updated == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "전략을 찾을 수 없습니다.");
+        jdbcTemplate.update("""
+            UPDATE positions SET buy_signal_id = NULL, updated_at = NOW()
+            WHERE user_id = ? AND buy_signal_id IN (
+              SELECT sig.id FROM signals sig
+              JOIN strategy_versions sv ON sv.id = sig.strategy_version_id
+              WHERE sv.strategy_id = ?
+            )
+            """, userId, strategyId);
+        jdbcTemplate.update("""
+            UPDATE position_executions SET source_signal_id = NULL
+            WHERE user_id = ? AND source_signal_id IN (
+              SELECT sig.id FROM signals sig
+              JOIN strategy_versions sv ON sv.id = sig.strategy_version_id
+              WHERE sv.strategy_id = ?
+            )
+            """, userId, strategyId);
+        jdbcTemplate.update("""
+            DELETE FROM signals
+            WHERE user_id = ? AND strategy_version_id IN (
+              SELECT id FROM strategy_versions WHERE strategy_id = ?
+            )
+            """, userId, strategyId);
     }
 
     private StrategyVersionResponse createVersion(UUID userId, UUID strategyId, int version, UUID universeVersionId, ValidatedRequest input) {

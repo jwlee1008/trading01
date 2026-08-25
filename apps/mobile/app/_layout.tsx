@@ -34,13 +34,13 @@ function Navigation() {
         <Stack.Screen name="indicator/[id]" options={{ title: '지표 설명' }} />
         <Stack.Screen name="signal/[id]" options={{ title: '신호 상세' }} />
         <Stack.Screen name="position/[id]" options={{ title: '포지션 상세' }} />
-        <Stack.Screen name="trade" options={{ title: '체결 · 주문' }} />
+        <Stack.Screen name="trade" options={{ title: '체결 기록' }} />
         <Stack.Screen name="sell-rule/[positionId]" options={{ title: '매도 규칙' }} />
         <Stack.Screen name="sell-signal/[id]" options={{ title: '매도 신호 상세' }} />
-        <Stack.Screen name="ranking/[id]" options={{ title: '조합 상세' }} />
         <Stack.Screen name="profile/[id]" options={{ title: '공개 프로필' }} />
         <Stack.Screen name="settings" options={{ title: '설정' }} />
         <Stack.Screen name="provider-status" options={{ title: '데이터 상태' }} />
+        <Stack.Screen name="test-top30" options={{ title: '테스트 TOP 30 설정' }} />
       </Stack>
     </>
   );

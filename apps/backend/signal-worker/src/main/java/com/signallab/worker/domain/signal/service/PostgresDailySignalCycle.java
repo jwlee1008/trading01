@@ -122,10 +122,12 @@ public class PostgresDailySignalCycle {
             SELECT sv.id AS strategy_version_id, sv.user_id, sv.root_logic, sv.engine_version,
                    i.id AS instrument_id, i.symbol, sr.rule_index, sr.operator, sr.params
               FROM public.strategy_versions sv
+              JOIN public.strategies strategy ON strategy.id = sv.strategy_id
               JOIN public.strategy_rules sr ON sr.strategy_version_id = sv.id
               JOIN public.universe_memberships um ON um.universe_version_id = sv.universe_version_id
               JOIN public.instruments i ON i.id = um.instrument_id
              WHERE sv.finalized_at IS NOT NULL AND sv.timeframe = 'D1' AND sv.notifications_enabled
+               AND strategy.archived_at IS NULL
                AND NOT EXISTS (
                  SELECT 1 FROM public.strategy_versions newer
                   WHERE newer.strategy_id=sv.strategy_id AND newer.finalized_at IS NOT NULL AND newer.version>sv.version

@@ -34,10 +34,19 @@ public class SignalService {
             """
             SELECT s.id, s.user_id, s.strategy_version_id, i.symbol, i.name_ko, s.candle_close_at,
                    s.signal_type, s.evidence, s.data_is_stale, c.close AS candle_close_price
-            FROM signals s JOIN instruments i ON i.id = s.instrument_id
+            FROM signals s
+            JOIN strategy_versions sv ON sv.id = s.strategy_version_id
+            JOIN strategies strategy ON strategy.id = sv.strategy_id
+            JOIN instruments i ON i.id = s.instrument_id
             LEFT JOIN candles c ON c.instrument_id = s.instrument_id AND c.timeframe = s.timeframe
                                AND c.close_at = s.candle_close_at
-            WHERE s.user_id = ?
+            WHERE s.user_id = ? AND strategy.archived_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM strategy_versions newer
+                WHERE newer.strategy_id = sv.strategy_id
+                  AND newer.finalized_at IS NOT NULL
+                  AND newer.version > sv.version
+              )
             ORDER BY s.candle_close_at DESC
             """,
             (rs, rowNum) -> new SignalRow(

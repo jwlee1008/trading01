@@ -2,9 +2,7 @@ package com.signallab.worker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.signallab.worker.domain.marketdata.service.MarketDataImportService;
-import com.signallab.worker.domain.order.service.PostgresPaperOrderProcessor;
 import com.signallab.worker.domain.outbox.service.PostgresOutboxDispatcher;
-import com.signallab.worker.domain.ranking.service.PostgresRankedBuyCycle;
 import com.signallab.worker.domain.signal.service.PostgresDailySignalCycle;
 import com.signallab.worker.domain.signal.service.PostgresSellSignalCycle;
 import com.signallab.worker.global.config.WorkerProperties;
@@ -55,7 +53,7 @@ public class SignalWorkerApplication {
     }
 
     @Bean
-    CommandLineRunner startup(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner) {
+    CommandLineRunner startup(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresSellSignalCycle sellSignalCycle, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner) {
         return args -> {
             if (!"none".equals(properties.getMarketDataAction()) && !properties.getMarketDataAction().isBlank()) {
                 System.out.println(marketDataImportService.run(properties));
@@ -64,9 +62,7 @@ public class SignalWorkerApplication {
             if (properties.isOnce()) {
                 String runKey = "manual:" + java.time.Instant.now();
                 taskRunner.run("signal", runKey, () -> dailySignalCycle.run(properties));
-                taskRunner.run("ranking", runKey, () -> rankedBuyCycle.run(properties));
                 taskRunner.run("sell-signal", runKey, () -> sellSignalCycle.run(properties));
-                taskRunner.run("paper-fill", runKey, () -> paperOrderProcessor.process(properties));
                 taskRunner.run("notification", runKey, () -> outboxDispatcher.dispatch(properties));
                 System.exit(0);
             }

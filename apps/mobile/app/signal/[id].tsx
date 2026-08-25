@@ -7,7 +7,7 @@ import { acknowledgeRemoteSignal, requestRemoteSignalAdvice } from '@/services/c
 import { useUniverses } from '@/hooks/useUniverses';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
 import { useAppStore } from '@/store/useAppStore';
-import { formatDateTime, formatPrice } from '@/utils/format';
+import { formatDateTime } from '@/utils/format';
 import type { SignalAdvice } from '@/domain/types';
 
 export default function SignalDetailScreen() {
@@ -91,14 +91,7 @@ export default function SignalDetailScreen() {
       ) : (
         <Button label="AI로 신호 해석하기" kind="secondary" busy={adviceBusy} onPress={() => { void explain(); }} />
       )}
-      {strategy?.locked ? (
-        <Banner tone="accent" title="공식 랭킹 자동 가상 체결" body={`다음 체결 가능 거래일 공식 시가에 NAV 10% 한도로 1회 시도합니다. 사용자는 주문·가격을 고를 수 없습니다. 기준가 ${formatPrice(signal.closePrice)}`} />
-      ) : (
-        <>
-          <Button label="실제 보유 등록" onPress={() => router.push({ pathname: '/trade', params: { ...tradeParams, mode: 'manual' } })} />
-          <Button label="연습 페이퍼 주문" kind="secondary" onPress={() => router.push({ pathname: '/trade', params: { ...tradeParams, mode: 'paper' } })} />
-        </>
-      )}
+      <Button label="실제 보유 등록" onPress={() => router.push({ pathname: '/trade', params: tradeParams })} />
       <AppText variant="caption" tone="muted" style={{ textAlign: 'center' }}>이 신호는 투자자문·매수 추천·수익 보장이 아닙니다.</AppText>
     </Screen>
   );

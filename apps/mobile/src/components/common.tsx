@@ -47,8 +47,9 @@ export function PriceChange({ price, change }: { price: number; change: number }
 
 export function PositionCard({ position, onPress }: { position: Position; onPress: () => void }) {
   const rate = profitRate(position);
+  const marketPriceAvailable = position.marketPriceAvailable !== false;
   const tone = rate >= 0 ? 'positive' : 'negative';
-  const kind = position.kind === 'MANUAL_LIVE' ? '실제 수동' : position.kind === 'SANDBOX_PAPER' ? '연습' : '공식 랭킹';
+  const kind = '실제 매매';
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${position.instrumentName} 포지션 상세`} onPress={onPress}>
       <Surface style={{ gap: spacing.sm }}>
@@ -58,10 +59,10 @@ export function PositionCard({ position, onPress }: { position: Position; onPres
         </View>
         <Divider />
         <View style={styles.row}>
-          <View style={{ gap: 3 }}><AppText variant="caption" tone="muted">평가 손익</AppText><AppText variant="subtitle" tone={tone}>{formatWon(unrealizedProfit(position))}</AppText></View>
-          <View style={{ alignItems: 'flex-end', gap: 3 }}><AppText variant="caption" tone="muted">수익률</AppText><AppText variant="subtitle" tone={tone}>{rate >= 0 ? '▲' : '▼'} {formatRate(rate)}</AppText></View>
+          <View style={{ gap: 3 }}><AppText variant="caption" tone="muted">평가 손익</AppText><AppText variant="subtitle" tone={tone}>{marketPriceAvailable ? formatWon(unrealizedProfit(position)) : '계산 대기'}</AppText></View>
+          <View style={{ alignItems: 'flex-end', gap: 3 }}><AppText variant="caption" tone="muted">수익률</AppText><AppText variant="subtitle" tone={tone}>{marketPriceAvailable ? `${rate >= 0 ? '▲' : '▼'} ${formatRate(rate)}` : '시세 없음'}</AppText></View>
         </View>
-        <AppText variant="caption" tone="muted">{position.quantity}주 · 평균 {formatPrice(position.averagePrice)} · 현재 {formatPrice(position.currentPrice)}</AppText>
+        <AppText variant="caption" tone="muted">{position.quantity}주 · 평균 {formatPrice(position.averagePrice)} · 현재 {marketPriceAvailable ? formatPrice(position.currentPrice) : '수집 대기'}</AppText>
       </Surface>
     </Pressable>
   );

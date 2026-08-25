@@ -24,17 +24,11 @@ signal:
     daily-cycle-enabled: ${WORKER_DAILY_CYCLE_ENABLED:false}
     expected-through: ${MARKET_DATA_EXPECTED_THROUGH:}
     candle-lookback: ${WORKER_CANDLE_LOOKBACK:500}
-    paper-orders-enabled: ${WORKER_PAPER_ORDERS_ENABLED:false}
     sell-cycle-enabled: ${WORKER_SELL_CYCLE_ENABLED:false}
-    ranked-buy-enabled: ${WORKER_RANKED_BUY_ENABLED:false}
-    ranking-snapshot-enabled: ${WORKER_RANKING_SNAPSHOT_ENABLED:false}
-    ranking-nav-enabled: ${WORKER_RANKING_NAV_ENABLED:false}
     market-data-auto-enabled: ${WORKER_MARKET_DATA_AUTO_ENABLED:false}
     market-data-auto-batch-size: ${WORKER_MARKET_DATA_AUTO_BATCH_SIZE:25}
     market-data-auto-initial-delay-ms: ${WORKER_MARKET_DATA_AUTO_INITIAL_DELAY_MS:5000}
     market-data-auto-interval-ms: ${WORKER_MARKET_DATA_AUTO_INTERVAL_MS:300000}
-    ranked-buy-batch-size: ${RANKED_BUY_BATCH_SIZE:500}
-    paper-order-batch-size: ${PAPER_ORDER_BATCH_SIZE:100}
     market-data-action: ${MARKET_DATA_ACTION:none}
     market-data-from: ${BACKFILL_FROM:}
     market-data-through: ${BACKFILL_THROUGH:}

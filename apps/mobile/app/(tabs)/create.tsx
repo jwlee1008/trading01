@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Banner, Button, Chip, Divider, EmptyState, Field, Screen, SectionTitle, Surface, ToggleRow, spacing, useSignalTheme } from '@signal/ui';
 import { Segmented, TitleBlock } from '@/components/common';
 import { indicators } from '@/data/catalog';
 import { useUniverses } from '@/hooks/useUniverses';
 import type { IndicatorId } from '@/domain/types';
-import { connectedApiEnabled, createRemoteStrategy, loadRemoteRankings, loadRemoteUniverseVersions, remoteStrategyRuleLabel, remoteUniverseKind, reviseRemoteStrategy } from '@/services/connected-api';
+import { createRemoteStrategy, loadRemoteUniverseVersions, remoteStrategyRuleLabel, remoteUniverseKind, reviseRemoteStrategy } from '@/services/connected-api';
 import { useRemoteApiReady } from '@/hooks/useRemoteApiReady';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -20,8 +20,6 @@ export default function CreateScreen() {
   const strategies = useAppStore((state) => state.strategies);
   const upsertRemoteStrategy = useAppStore((state) => state.upsertRemoteStrategy);
   const universeQuery = useUniverses();
-  const tierQuery = useQuery({ queryKey: ['rankings', '3M'], queryFn: () => loadRemoteRankings('3M'), enabled: connectedApiEnabled, retry: false });
-  const tiers = new Map((tierQuery.data?.indicatorTiers ?? []).map((item) => [item.indicatorId, item.tier] as const));
   const universes = universeQuery.data ?? [];
   const params = useLocalSearchParams<{ edit?: string }>();
   const editing = strategies.find((item) => item.id === params.edit && !item.locked);
@@ -91,7 +89,10 @@ export default function CreateScreen() {
         ? await reviseRemoteStrategy(editing.remoteStrategyId!, input)
         : await createRemoteStrategy(input);
       upsertRemoteStrategy(strategy);
-      void queryClient.invalidateQueries({ queryKey: ['connected-api-snapshot'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connected-api-snapshot'] }),
+        queryClient.invalidateQueries({ queryKey: ['rankings'] }),
+      ]);
       router.push({ pathname: '/strategy/[id]', params: { id: strategy.id, saved: '1' } });
     } catch (caught) {
       Alert.alert('전략 저장 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
@@ -113,7 +114,6 @@ export default function CreateScreen() {
       <View style={styles.chips}>{universes.slice(0, 3).map((item) => <Chip key={item.id} label={item.name} selected={selectedUniverseId === item.id} onPress={() => setUniverse(item.id)} />)}</View>
 
       <SectionTitle title={`2. 지표 선택 ${selected.length}/5`} />
-      <Banner tone="accent" title="지표 검증 티어" body="최근 3개월 실제 신호가 최소 30건 쌓인 지표만 S~C 티어를 표시합니다. 표본 수집 중이어도 전략 저장과 신호 계산은 가능합니다." />
       <Surface style={{ paddingVertical: 0 }}>
         {indicators.map((indicator, index) => {
           const active = selected.includes(indicator.id);
@@ -121,7 +121,7 @@ export default function CreateScreen() {
             <React.Fragment key={indicator.id}>
               <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggleIndicator(indicator.id)} style={styles.indicator}>
                 <View style={[styles.check, { borderColor: active ? colors.accent : colors.border }, active && { backgroundColor: colors.accent }]}><AppText tone={active ? 'inverse' : 'muted'}>{active ? '✓' : ''}</AppText></View>
-                <View style={{ flex: 1, gap: 3 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="bodyStrong">{indicator.name}</AppText><Chip label={tiers.get(indicator.id) ?? '표본 수집 중'} /></View><AppText variant="caption" tone="muted">{remoteApiReady ? remoteStrategyRuleLabel(indicator.id) : indicator.defaultRule}</AppText></View>
+                <View style={{ flex: 1, gap: 3 }}><AppText variant="bodyStrong">{indicator.name}</AppText><AppText variant="caption" tone="muted">{remoteApiReady ? remoteStrategyRuleLabel(indicator.id) : indicator.defaultRule}</AppText></View>
                 <Pressable accessibilityRole="button" accessibilityLabel={`${indicator.name} 설명`} hitSlop={10} onPress={() => router.push({ pathname: '/indicator/[id]', params: { id: indicator.id } })}><AppText tone="accent">설명</AppText></Pressable>
               </Pressable>
               {index < indicators.length - 1 ? <Divider /> : null}
@@ -134,7 +134,7 @@ export default function CreateScreen() {
       <Segmented options={[{ value: 'ALL', label: '모두 충족 (AND)' }, { value: 'ANY', label: '하나 이상 (OR)' }]} value={mode} onChange={setMode} />
       <ToggleRow title="고급 설정 펼치기" body="파라미터와 알림 cooldown 확인" value={advanced} onValueChange={setAdvanced} />
       {advanced ? <Surface style={{ gap: spacing.md }}><AppText variant="bodyStrong">고급 설정</AppText><AppText tone="muted">선택 지표별 파라미터는 검증 grid 기본값을 씁니다. 신호 cooldown은 종목·전략별 24시간입니다.</AppText><Banner title="파라미터 변경은 새 전략 버전을 만듭니다" /></Surface> : null}
-      <ToggleRow title="전략 공개" body="기본값 비공개 · 실제 보유 정보는 공개되지 않음" value={makePublic} onValueChange={setMakePublic} />
+      <ToggleRow title="전략 공개" body="공개하면 랭킹 프로필의 공개 전략 목록에 표시됩니다. 실제 보유 정보는 공개되지 않습니다." value={makePublic} onValueChange={setMakePublic} />
       <Button label={!remoteApiReady ? '로그인 후 전략 저장' : saving ? '저장 중…' : universeChecking || universeQuery.isPending ? '종목군 확인 중…' : editing ? `v${editing.version + 1}로 저장` : '전략 저장'} onPress={() => { void save(); }} disabled={Boolean(error) || saving || universeChecking || universeQuery.isPending || !remoteApiReady} />
 
       <SectionTitle title={`내 전략 ${strategies.length}개`} />

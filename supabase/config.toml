@@ -1,4 +1,4 @@
-project_id = "tradingmanager"
+project_id = "trading03"
 
 [db]
 major_version = 15

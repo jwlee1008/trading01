@@ -61,20 +61,21 @@ public class ManualExecutionService {
             position = position == null
                 ? createPosition(userId, portfolioId, instrumentId, request.quantity(), price, request.executedAt(), signalId)
                 : addBuy(position, request.quantity(), price);
-        } else {
-            position = applySell(position, request.quantity(), price, request.executedAt());
         }
 
         ExecutionRow execution = jdbcTemplate.queryForObject(
             """
             INSERT INTO position_executions
               (user_id, portfolio_id, position_id, portfolio_kind, instrument_id, side, executed_at, unit_price, quantity, note, source_signal_id, idempotency_key)
-            VALUES (?, ?, ?, 'MANUAL_LIVE', ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, portfolio_id, position_id, side, unit_price, quantity, fee, tax, executed_at, source_signal_id, idempotency_key, reverses_execution_id
+            VALUES (?, ?, ?, 'MANUAL_LIVE', ?, ?::order_side, ?, ?, ?, ?, ?, ?)
+            RETURNING id, portfolio_id, position_id, side, unit_price, quantity, fee, tax, executed_at, note, source_signal_id, idempotency_key, reverses_execution_id
             """,
             (rs, rowNum) -> executionRow(rs), userId, portfolioId, position.id(), instrumentId, request.side(),
             java.sql.Timestamp.from(request.executedAt().toInstant()), price, request.quantity(), request.memo() == null ? "" : request.memo(), signalId, request.idempotencyKey()
         );
+        if ("SELL".equals(request.side())) {
+            position = applySell(position, request.quantity(), price, request.executedAt());
+        }
         return new ManualExecutionResponse(toResponse(execution, request.symbol()), requirePosition(userId, position.id()), false, null);
     }
 
@@ -134,7 +135,7 @@ public class ManualExecutionService {
         long nextQuantity = position.quantity() - quantity;
         BigDecimal realized = position.realizedPnl().add(price.subtract(position.averageCost()).multiply(BigDecimal.valueOf(quantity)));
         jdbcTemplate.update(
-            "UPDATE positions SET quantity = ?, realized_pnl = ?, status = ?, closed_at = ?, updated_at = NOW() WHERE id = ?",
+            "UPDATE positions SET quantity = ?, realized_pnl = ?, status = ?::position_status, closed_at = ?, updated_at = NOW() WHERE id = ?",
             nextQuantity, realized, nextQuantity == 0 ? "CLOSED" : "PARTIALLY_CLOSED",
             nextQuantity == 0 ? java.sql.Timestamp.from(executedAt.toInstant()) : null, position.id()
         );
@@ -144,7 +145,7 @@ public class ManualExecutionService {
     private ExecutionRow priorExecution(UUID portfolioId, String key) {
         List<ExecutionRow> rows = jdbcTemplate.query(
             """
-            SELECT id, portfolio_id, position_id, side, unit_price, quantity, fee, tax, executed_at, source_signal_id, idempotency_key, reverses_execution_id
+            SELECT id, portfolio_id, position_id, side, unit_price, quantity, fee, tax, executed_at, note, source_signal_id, idempotency_key, reverses_execution_id
             FROM position_executions WHERE portfolio_id = ? AND idempotency_key = ?
             """, (rs, rowNum) -> executionRow(rs), portfolioId, key
         );
@@ -164,12 +165,12 @@ public class ManualExecutionService {
     private static ExecutionRow executionRow(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new ExecutionRow(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("portfolio_id")), UUID.fromString(rs.getString("position_id")),
             rs.getString("side"), rs.getBigDecimal("unit_price"), rs.getLong("quantity"), rs.getBigDecimal("fee"), rs.getBigDecimal("tax"),
-            rs.getTimestamp("executed_at").toInstant().atOffset(ZoneOffset.UTC), optionalUuid(rs.getString("source_signal_id")), rs.getString("idempotency_key"), optionalUuid(rs.getString("reverses_execution_id")));
+            rs.getTimestamp("executed_at").toInstant().atOffset(ZoneOffset.UTC), rs.getString("note"), optionalUuid(rs.getString("source_signal_id")), rs.getString("idempotency_key"), optionalUuid(rs.getString("reverses_execution_id")));
     }
 
     private static ExecutionResponse toResponse(ExecutionRow execution, String symbol) {
         return new ExecutionResponse(execution.id(), execution.portfolioId(), execution.positionId(), symbol, execution.side(), decimal(execution.price()), execution.quantity(),
-            decimal(execution.fee()), decimal(execution.tax()), execution.executedAt(), execution.signalId(), execution.idempotencyKey(), execution.correctionOf());
+            decimal(execution.fee()), decimal(execution.tax()), execution.executedAt(), execution.memo(), execution.signalId(), execution.idempotencyKey(), execution.correctionOf());
     }
 
     private static UUID optionalUuid(String value) {
@@ -187,5 +188,5 @@ public class ManualExecutionService {
 
     private record PortfolioRow(UUID id, String kind) {}
     private record PositionRow(UUID id, UUID portfolioId, UUID instrumentId, long quantity, BigDecimal averageCost, BigDecimal realizedPnl) {}
-    private record ExecutionRow(UUID id, UUID portfolioId, UUID positionId, String side, BigDecimal price, long quantity, BigDecimal fee, BigDecimal tax, java.time.OffsetDateTime executedAt, UUID signalId, String idempotencyKey, UUID correctionOf) {}
+    private record ExecutionRow(UUID id, UUID portfolioId, UUID positionId, String side, BigDecimal price, long quantity, BigDecimal fee, BigDecimal tax, java.time.OffsetDateTime executedAt, String memo, UUID signalId, String idempotencyKey, UUID correctionOf) {}
 }

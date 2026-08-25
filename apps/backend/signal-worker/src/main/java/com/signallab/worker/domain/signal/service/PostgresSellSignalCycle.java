@@ -193,9 +193,8 @@ public class PostgresSellSignalCycle {
                 statement.setString(4,match.kind()); statement.setBigDecimal(5,work.close()); statement.setBigDecimal(6,work.averageCost()); statement.setObject(7,work.sessionDate()); statement.executeUpdate();
             }
             int outbox = insertOutbox(connection, work, signalId, evaluation);
-            int ranked = "RANKED_PAPER".equals(work.portfolioKind()) ? insertRankedSell(connection, work, signalId) : 0;
             updateHighest(connection, work);
-            connection.commit(); return new SaveResult(true, outbox == 1, ranked == 1);
+            connection.commit(); return new SaveResult(true, outbox == 1, false);
         } catch (Exception error) { connection.rollback(); throw error; }
         finally { connection.setAutoCommit(oldAutoCommit); }
     }
@@ -209,21 +208,6 @@ public class PostgresSellSignalCycle {
         String payload=mapper.writeValueAsString(Map.of("type","SELL_CONDITION","positionId",w.positionId().toString(),"sessionDate",w.sessionDate().toString(),"matches",e.matches().stream().map(SellRuleEvaluator.Match::key).toList()));
         try(PreparedStatement s=c.prepareStatement("INSERT INTO push_outbox(user_id,position_signal_id,position_id,dedupe_key,status,redacted_payload) VALUES (?,?,?,?,'PENDING',?::jsonb) ON CONFLICT(dedupe_key) DO NOTHING")){
             s.setObject(1,w.userId());s.setObject(2,signalId);s.setObject(3,w.positionId());s.setString(4,"push:sell:"+w.positionId()+":"+w.sessionDate());s.setString(5,payload);return s.executeUpdate();}
-    }
-    private int insertRankedSell(Connection c, Work w, UUID signalId) throws Exception {
-        try(PreparedStatement s=c.prepareStatement("""
-            INSERT INTO paper_orders(user_id,portfolio_id,portfolio_kind,position_id,instrument_id,side,quantity,status,
-              scheduled_market_session_id,source_position_signal_id,fill_model_version_id,cost_model_version_id,can_user_cancel,idempotency_key)
-            SELECT ?,?,'RANKED_PAPER',?,?,'SELL',?,'PENDING',ms.id,?,fm.id,cm.id,false,?
-              FROM LATERAL (SELECT mi.id FROM market_sessions mi JOIN instruments i ON i.market=mi.market WHERE i.id=? AND mi.is_trading_day AND mi.session_date>? ORDER BY mi.session_date LIMIT 1) ms,
-                   LATERAL (SELECT id FROM paper_fill_model_versions WHERE effective_from<=now() ORDER BY effective_from DESC,version DESC LIMIT 1) fm,
-                   LATERAL (SELECT id FROM cost_model_versions WHERE effective_from<=now() ORDER BY effective_from DESC,version DESC LIMIT 1) cm
-            ON CONFLICT(portfolio_id,idempotency_key) DO NOTHING
-            """)){
-            s.setObject(1,w.userId());s.setObject(2,w.portfolioId());s.setObject(3,w.positionId());s.setObject(4,w.instrumentId());s.setLong(5,w.quantity());s.setObject(6,signalId);
-            s.setString(7,"ranked-sell:"+signalId);s.setObject(8,w.instrumentId());s.setObject(9,w.sessionDate());int count=s.executeUpdate();
-            if(count==0) throw new IllegalStateException("Ranked SELL requires next market session and active model versions");
-            update(c,"UPDATE positions SET status='EXIT_PENDING',updated_at=now() WHERE id=? AND status IN ('OPEN','PARTIALLY_CLOSED')",w.positionId());return count;}
     }
     private void updateHighest(Connection c,Work w)throws Exception{try(PreparedStatement s=c.prepareStatement("UPDATE positions SET highest_completed_close=greatest(COALESCE(highest_completed_close,0),?),updated_at=now() WHERE id=?")){s.setBigDecimal(1,w.close());s.setObject(2,w.positionId());s.executeUpdate();}}
     private void update(Connection c,String sql,UUID id)throws Exception{try(PreparedStatement s=c.prepareStatement(sql)){s.setObject(1,id);s.executeUpdate();}}

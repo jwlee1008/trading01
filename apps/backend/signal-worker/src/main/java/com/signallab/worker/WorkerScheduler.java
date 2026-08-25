@@ -1,10 +1,6 @@
 package com.signallab.worker;
 
-import com.signallab.worker.domain.order.service.PostgresPaperOrderProcessor;
 import com.signallab.worker.domain.outbox.service.PostgresOutboxDispatcher;
-import com.signallab.worker.domain.ranking.service.PostgresRankedBuyCycle;
-import com.signallab.worker.domain.ranking.service.PostgresRankingSnapshotCycle;
-import com.signallab.worker.domain.ranking.service.PostgresRankingNavCycle;
 import com.signallab.worker.domain.signal.service.PostgresDailySignalCycle;
 import com.signallab.worker.domain.signal.service.PostgresSellSignalCycle;
 import com.signallab.worker.domain.marketdata.service.MarketDataImportService;
@@ -23,24 +19,16 @@ final class WorkerScheduler {
     private final WorkerProperties properties;
     private final PostgresOutboxDispatcher outboxDispatcher;
     private final PostgresDailySignalCycle dailySignalCycle;
-    private final PostgresRankedBuyCycle rankedBuyCycle;
-    private final PostgresRankingSnapshotCycle rankingSnapshotCycle;
-    private final PostgresRankingNavCycle rankingNavCycle;
     private final PostgresSellSignalCycle sellSignalCycle;
-    private final PostgresPaperOrderProcessor paperOrderProcessor;
     private final MarketDataImportService marketDataImportService;
     private final WorkerTaskRunner taskRunner;
     private final JdbcTemplate jdbc;
 
-    WorkerScheduler(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresRankedBuyCycle rankedBuyCycle, PostgresRankingSnapshotCycle rankingSnapshotCycle, PostgresRankingNavCycle rankingNavCycle, PostgresSellSignalCycle sellSignalCycle, PostgresPaperOrderProcessor paperOrderProcessor, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner, JdbcTemplate jdbc) {
+    WorkerScheduler(WorkerProperties properties, PostgresOutboxDispatcher outboxDispatcher, PostgresDailySignalCycle dailySignalCycle, PostgresSellSignalCycle sellSignalCycle, MarketDataImportService marketDataImportService, WorkerTaskRunner taskRunner, JdbcTemplate jdbc) {
         this.properties = properties;
         this.outboxDispatcher = outboxDispatcher;
         this.dailySignalCycle = dailySignalCycle;
-        this.rankedBuyCycle = rankedBuyCycle;
-        this.rankingSnapshotCycle = rankingSnapshotCycle;
-        this.rankingNavCycle = rankingNavCycle;
         this.sellSignalCycle = sellSignalCycle;
-        this.paperOrderProcessor = paperOrderProcessor;
         this.marketDataImportService = marketDataImportService;
         this.taskRunner = taskRunner;
         this.jdbc = jdbc;
@@ -51,11 +39,7 @@ final class WorkerScheduler {
         if (properties.isEnabled()) {
             String runKey = Instant.now().truncatedTo(ChronoUnit.MINUTES).toString();
             taskRunner.run("signal", runKey, () -> dailySignalCycle.run(properties));
-            taskRunner.run("ranking-snapshot", runKey, () -> rankingSnapshotCycle.run(properties));
-            taskRunner.run("ranked-buy", runKey, () -> rankedBuyCycle.run(properties));
             taskRunner.run("sell-signal", runKey, () -> sellSignalCycle.run(properties));
-            taskRunner.run("paper-fill", runKey, () -> paperOrderProcessor.process(properties));
-            taskRunner.run("ranking-nav", runKey, () -> rankingNavCycle.run(properties));
             taskRunner.run("notification", runKey, () -> outboxDispatcher.dispatch(properties));
         }
     }
@@ -98,11 +82,7 @@ final class WorkerScheduler {
         return switch (taskName) {
             case "market-data" -> () -> marketDataImportService.automaticRefresh(properties);
             case "signal" -> () -> dailySignalCycle.run(properties);
-            case "ranking-snapshot" -> () -> rankingSnapshotCycle.run(properties);
-            case "ranking-nav" -> () -> rankingNavCycle.run(properties);
-            case "ranked-buy" -> () -> rankedBuyCycle.run(properties);
             case "sell-signal" -> () -> sellSignalCycle.run(properties);
-            case "paper-fill" -> () -> paperOrderProcessor.process(properties);
             case "notification" -> () -> outboxDispatcher.dispatch(properties);
             default -> throw new IllegalArgumentException("지원하지 않는 Worker 작업입니다: " + taskName);
         };

@@ -14,8 +14,6 @@ values
   ('paper.sandbox', '연습 페이퍼', '사용자 선택 페이퍼 주문'),
   ('paper.ranked', '공식 랭킹 페이퍼', '잠긴 전략 자동 가상 체결'),
   ('signal.sell', '매도 조건 신호', '열린 포지션 매도 규칙 감시'),
-  ('ranking.combination', '조합 랭킹', '3개월·6개월·1년 조합 성과'),
-  ('ranking.indicator_tier', '지표 티어', 'S/A/B/C 견고성 등급'),
   ('ranking.user', '사용자 랭킹', '공식 페이퍼 통합 순위'),
   ('profile.public', '공개 프로필', '명시 동의 기반 공개 전략·성과'),
   ('notification.push', '알림', '신호 알림과 설정')
@@ -33,10 +31,8 @@ set enabled = true, limit_value = null,
 
 insert into public.feature_flags (code, enabled, configuration)
 values
-  ('ranking.search.five_indicators', false, '{"requires_benchmark_pass":true,"current_max":4}'::jsonb),
   ('market_data.broker', false, '{"release_blocker":"provider contract and credentials"}'::jsonb),
-  ('push.remote', false, '{"development_provider":"console"}'::jsonb),
-  ('ranking.restart', true, '{"cooldown_days":30}'::jsonb)
+  ('push.remote', false, '{"development_provider":"console"}'::jsonb)
 on conflict (code) do update
 set enabled = excluded.enabled, configuration = excluded.configuration, updated_at = now();
 

@@ -21,6 +21,7 @@ export const universeIdFromKind = (kind: string): UniverseId => {
   if (normalized === 'KOSPI_200') return 'kospi200';
   if (normalized === 'KOSDAQ_150') return 'kosdaq150';
   if (normalized === 'KOSPI_TOP_10') return 'kospiTop10';
+  if (normalized === 'DEMO_TOP_30') return 'demoTop30';
   if (normalized === 'KOSPI_ALL') return 'kospi';
   if (normalized === 'KOSDAQ_ALL') return 'kosdaq';
   if (normalized === 'CUSTOM') return 'custom';
@@ -28,6 +29,6 @@ export const universeIdFromKind = (kind: string): UniverseId => {
 };
 
 export const universeName = (id: UniverseId): string => ({
-  kospi200: 'KOSPI 200', kosdaq150: 'KOSDAQ 150', kospiTop10: 'KOSPI 시가총액 TOP 10', kospi: 'KOSPI', kosdaq: 'KOSDAQ',
+  kospi200: 'KOSPI 200', kosdaq150: 'KOSDAQ 150', kospiTop10: 'KOSPI 시가총액 TOP 10', demoTop30: '테스트 TOP 30', kospi: 'KOSPI', kosdaq: 'KOSDAQ',
   all: 'KOSPI · KOSDAQ', custom: '내 종목 목록',
 })[id];

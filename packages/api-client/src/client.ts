@@ -2,7 +2,6 @@ import type {
   AlertSettingsInput,
   CreateStrategyInput,
   ManualExecutionInput,
-  PaperOrderInput,
   ProfileVisibilityInput,
   RankingPeriod,
   SellRuleInput,
@@ -90,10 +89,6 @@ export class SignalApiClient {
       method: "POST",
       body: JSON.stringify(input),
     });
-  }
-
-  placePaperOrder(input: PaperOrderInput): Promise<ApiEnvelope<unknown>> {
-    return this.request("/v1/paper-orders", { method: "POST", body: JSON.stringify(input) });
   }
 
   saveSellRule(positionId: string, input: SellRuleInput): Promise<ApiEnvelope<unknown>> {

@@ -2,7 +2,6 @@ package com.signallab.api.domain.ranking.controller;
 
 import com.signallab.api.global.health.service.DatabaseHealthService;
 import com.signallab.api.domain.ranking.service.RankingService;
-import com.signallab.api.domain.ranking.service.RankingTrackService;
 import com.signallab.api.global.web.ApiEnvelope;
 import com.signallab.api.global.web.CurrentUser;
 import java.util.Map;
@@ -13,8 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/v1")
@@ -22,28 +19,9 @@ public class RankingController {
 
     private final RankingService rankingService;
     private final DatabaseHealthService databaseHealthService;
-    private final RankingTrackService rankingTrackService;
-
-    public RankingController(RankingService rankingService, DatabaseHealthService databaseHealthService, RankingTrackService rankingTrackService) {
+    public RankingController(RankingService rankingService, DatabaseHealthService databaseHealthService) {
         this.rankingService = rankingService;
         this.databaseHealthService = databaseHealthService;
-        this.rankingTrackService = rankingTrackService;
-    }
-
-    @GetMapping("/me/ranking-track")
-    public Map<String, Object> activeTrack(@CurrentUser String userId) {
-        return ApiEnvelope.ok(rankingTrackService.active(parseUserId(userId)), databaseHealthService.isPostgres());
-    }
-
-    @PostMapping("/ranking-tracks")
-    public Map<String, Object> startTrack(@CurrentUser String userId, @RequestBody RankingTrackService.StartRequest request) {
-        return ApiEnvelope.ok(rankingTrackService.start(parseUserId(userId), request), databaseHealthService.isPostgres());
-    }
-
-    @DeleteMapping("/me/ranking-track")
-    public Map<String, Object> endTrack(@CurrentUser String userId) {
-        rankingTrackService.end(parseUserId(userId));
-        return ApiEnvelope.ok(Map.of("ended", true), databaseHealthService.isPostgres());
     }
 
     @GetMapping("/rankings")
@@ -51,13 +29,14 @@ public class RankingController {
         return ApiEnvelope.ok(rankingService.rankings(period), databaseHealthService.isPostgres());
     }
 
-    @PostMapping("/rankings/combinations/{combinationId}/copy")
-    public Map<String, Object> copyCombination(
+    @PostMapping("/profiles/{publicProfileId}/strategies/{strategyVersionId}/copy")
+    public Map<String, Object> copyPublicStrategy(
         @CurrentUser String userId,
-        @PathVariable String combinationId
+        @PathVariable UUID publicProfileId,
+        @PathVariable UUID strategyVersionId
     ) {
         return ApiEnvelope.ok(
-            rankingService.copyCombination(parseUserId(userId), combinationId),
+            rankingService.copyPublicStrategy(parseUserId(userId), publicProfileId, strategyVersionId),
             databaseHealthService.isPostgres()
         );
     }

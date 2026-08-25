@@ -17,10 +17,20 @@ public class AlertService {
     public List<Alert> findFor(String userId) {
         return jdbcTemplate.query(
             """
-            select id, entity_id, after_redacted, occurred_at
-            from audit_logs
-            where user_id = ? and action = 'SIGNAL_CREATED'
-            order by occurred_at desc
+            select audit.id, audit.entity_id, audit.after_redacted, audit.occurred_at
+            from audit_logs audit
+            join signals signal on signal.id = audit.entity_id and signal.user_id = audit.user_id
+            join strategy_versions sv on sv.id = signal.strategy_version_id
+            join strategies strategy on strategy.id = sv.strategy_id
+            where audit.user_id = ? and audit.action = 'SIGNAL_CREATED'
+              and strategy.archived_at is null
+              and not exists (
+                select 1 from strategy_versions newer
+                where newer.strategy_id = sv.strategy_id
+                  and newer.finalized_at is not null
+                  and newer.version > sv.version
+              )
+            order by audit.occurred_at desc
             limit 50
             """,
             (rs, rowNum) -> {

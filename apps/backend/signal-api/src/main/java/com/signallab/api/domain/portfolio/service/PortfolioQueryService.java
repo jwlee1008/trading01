@@ -1,5 +1,6 @@
 package com.signallab.api.domain.portfolio.service;
 
+import com.signallab.api.domain.execution.dto.ExecutionResponse;
 import com.signallab.api.domain.portfolio.dto.PortfolioResponse;
 import com.signallab.api.domain.portfolio.dto.PositionResponse;
 import java.math.BigDecimal;
@@ -47,25 +48,52 @@ public class PortfolioQueryService {
     }
 
     public List<PositionResponse> positionsFor(UUID userId) {
-        return jdbcTemplate.query(
+        List<PositionRow> positions = jdbcTemplate.query(
             """
             SELECT p.id, p.portfolio_id, i.symbol, i.name_ko, p.status, p.quantity, p.average_cost,
-                   p.highest_completed_close, p.opened_at, p.realized_pnl, p.buy_signal_id, p.sell_rule_version_id
+                   latest.close AS current_market_price, p.highest_completed_close, p.opened_at, p.realized_pnl,
+                   p.buy_signal_id, p.sell_rule_version_id
             FROM positions p JOIN instruments i ON i.id = p.instrument_id
+            LEFT JOIN LATERAL (
+              SELECT c.close FROM candles c
+              WHERE c.instrument_id = p.instrument_id AND c.is_final AND NOT c.is_stale
+              ORDER BY c.close_at DESC LIMIT 1
+            ) latest ON TRUE
             WHERE p.user_id = ? ORDER BY p.opened_at ASC
             """,
-            (rs, rowNum) -> {
-                BigDecimal averagePrice = rs.getBigDecimal("average_cost");
-                BigDecimal highestClose = rs.getBigDecimal("highest_completed_close");
-                return new PositionResponse(
-                    UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("portfolio_id")),
-                    rs.getString("symbol"), rs.getString("name_ko"), rs.getString("status"), rs.getLong("quantity"),
-                    decimal(averagePrice), decimal(averagePrice), decimal(highestClose == null ? averagePrice : highestClose),
-                    rs.getTimestamp("opened_at").toInstant().atOffset(ZoneOffset.UTC), decimal(rs.getBigDecimal("realized_pnl")),
-                    nullableUuid(rs.getString("buy_signal_id")), nullableUuid(rs.getString("sell_rule_version_id"))
-                );
-            }, userId
+            (rs, rowNum) -> new PositionRow(
+                UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("portfolio_id")),
+                rs.getString("symbol"), rs.getString("name_ko"), rs.getString("status"), rs.getLong("quantity"),
+                rs.getBigDecimal("average_cost"), rs.getBigDecimal("current_market_price"), rs.getBigDecimal("highest_completed_close"),
+                rs.getTimestamp("opened_at").toInstant().atOffset(ZoneOffset.UTC), rs.getBigDecimal("realized_pnl"),
+                nullableUuid(rs.getString("buy_signal_id")), nullableUuid(rs.getString("sell_rule_version_id"))
+            ), userId
         );
+        Map<UUID, List<ExecutionResponse>> executions = jdbcTemplate.query(
+            """
+            SELECT e.id, e.portfolio_id, e.position_id, i.symbol, e.side, e.unit_price, e.quantity,
+                   e.fee, e.tax, e.executed_at, e.note, e.source_signal_id, e.idempotency_key, e.reverses_execution_id
+            FROM position_executions e JOIN instruments i ON i.id = e.instrument_id
+            WHERE e.user_id = ?
+            ORDER BY e.executed_at ASC, e.recorded_at ASC, e.id ASC
+            """,
+            (rs, rowNum) -> new ExecutionResponse(
+                UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("portfolio_id")), UUID.fromString(rs.getString("position_id")),
+                rs.getString("symbol"), rs.getString("side"), decimal(rs.getBigDecimal("unit_price")), rs.getLong("quantity"),
+                decimal(rs.getBigDecimal("fee")), decimal(rs.getBigDecimal("tax")), rs.getTimestamp("executed_at").toInstant().atOffset(ZoneOffset.UTC),
+                rs.getString("note"), nullableUuid(rs.getString("source_signal_id")), rs.getString("idempotency_key"), nullableUuid(rs.getString("reverses_execution_id"))
+            ), userId
+        ).stream().collect(Collectors.groupingBy(ExecutionResponse::positionId));
+        return positions.stream().map(position -> {
+            BigDecimal highestClose = position.highestClose() == null ? position.averagePrice() : position.highestClose();
+            return new PositionResponse(
+                position.id(), position.portfolioId(), position.symbol(), position.name(), position.status(), position.quantity(),
+                decimal(position.averagePrice()), decimal(position.currentMarketPrice() == null ? position.averagePrice() : position.currentMarketPrice()),
+                position.currentMarketPrice() != null, decimal(highestClose), position.openedAt(),
+                decimal(position.realizedPnl()), position.linkedSignalId(), position.sellRuleVersionId(),
+                executions.getOrDefault(position.id(), List.of())
+            );
+        }).toList();
     }
 
     private static UUID nullableUuid(String value) {
@@ -77,4 +105,7 @@ public class PortfolioQueryService {
     }
 
     private record PortfolioRow(UUID id, UUID userId, String name, String kind, BigDecimal cash) {}
+    private record PositionRow(UUID id, UUID portfolioId, String symbol, String name, String status, long quantity,
+                               BigDecimal averagePrice, BigDecimal currentMarketPrice, BigDecimal highestClose, java.time.OffsetDateTime openedAt,
+                               BigDecimal realizedPnl, UUID linkedSignalId, UUID sellRuleVersionId) {}
 }

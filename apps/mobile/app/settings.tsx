@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppText, Banner, Button, Divider, Field, ListRow, Screen, SectionTitle, Surface, ToggleRow, spacing } from '@signal/ui';
 import { appBrand } from '@signal/config';
 import { Segmented, TitleBlock } from '@/components/common';
@@ -11,15 +12,14 @@ import { supabaseConfigured } from '@/services/supabase';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function SettingsScreen() {
+  const queryClient = useQueryClient();
   const auth = useAuth();
   const storeNickname = useAppStore((state) => state.nickname);
   const profilePublic = useAppStore((state) => state.profilePublic);
-  const delayedPublic = useAppStore((state) => state.delayedPositionPublic);
   const notifications = useAppStore((state) => state.notificationsEnabled);
   const quietHours = useAppStore((state) => state.quietHoursEnabled);
   const themeMode = useAppStore((state) => state.themeMode);
   const setProfilePublic = useAppStore((state) => state.setProfilePublic);
-  const setDelayedPositionPublic = useAppStore((state) => state.setDelayedPositionPublic);
   const setNotifications = useAppStore((state) => state.setNotificationsEnabled);
   const setQuietHours = useAppStore((state) => state.setQuietHoursEnabled);
   const setThemeMode = useAppStore((state) => state.setThemeMode);
@@ -31,19 +31,22 @@ export default function SettingsScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const remoteAccountConnected = connectedApiEnabled && (!supabaseConfigured || auth.session !== null);
 
-  const saveProfile = async (next: { nickname: string; profilePublic: boolean; delayedPublic: boolean }) => {
+  const saveProfile = async (next: { nickname: string; profilePublic: boolean }) => {
     if (!remoteAccountConnected) throw new Error('로그인이 필요합니다.');
-    await updateRemoteProfileVisibility({ isPublic: next.profilePublic, nickname: next.nickname, discloseOpenPositions: next.delayedPublic });
+    await updateRemoteProfileVisibility({ isPublic: next.profilePublic, nickname: next.nickname, discloseOpenPositions: false });
     setNickname(next.nickname);
     setProfilePublic(next.profilePublic);
-    setDelayedPositionPublic(next.delayedPublic);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['connected-api-snapshot'] }),
+      queryClient.invalidateQueries({ queryKey: ['rankings'] }),
+    ]);
   };
   const saveNickname = async () => {
     const nextNickname = nickname.trim();
     if (nextNickname.length < 2) return Alert.alert('닉네임 확인', '닉네임은 2자 이상 입력하세요.');
     setSavingProfile(true);
     try {
-      await saveProfile({ nickname: nextNickname, profilePublic, delayedPublic });
+      await saveProfile({ nickname: nextNickname, profilePublic });
       Alert.alert('닉네임을 저장했어요');
     } catch (caught) {
       Alert.alert('프로필 저장 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
@@ -54,17 +57,7 @@ export default function SettingsScreen() {
   const changeProfilePublic = async (value: boolean) => {
     setSavingProfile(true);
     try {
-      await saveProfile({ nickname: storeNickname, profilePublic: value, delayedPublic: value ? delayedPublic : false });
-    } catch (caught) {
-      Alert.alert('공개 설정 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-  const changeDelayedPublic = async (value: boolean) => {
-    setSavingProfile(true);
-    try {
-      await saveProfile({ nickname: storeNickname, profilePublic, delayedPublic: value });
+      await saveProfile({ nickname: storeNickname, profilePublic: value });
     } catch (caught) {
       Alert.alert('공개 설정 실패', caught instanceof Error ? caught.message : '잠시 뒤 다시 시도하세요.');
     } finally {
@@ -145,17 +138,18 @@ export default function SettingsScreen() {
         <Field label="닉네임" value={nickname} onChangeText={setNicknameDraft} maxLength={16} />
         <Button label={savingProfile ? '저장 중…' : '닉네임 저장'} kind="secondary" compact onPress={() => { void saveNickname(); }} disabled={savingProfile} />
         <Divider />
-        <ToggleRow title="공식 랭킹 프로필 공개" body="기본값 비공개. 공개 철회 시 신규 랭킹과 공개 화면에서 제거" value={profilePublic} onValueChange={(value) => { void changeProfilePublic(value); }} disabled={savingProfile} />
-        <ToggleRow title="미청산 페이퍼 포지션 공개" body="최소 1거래일 지연. 실제 수동 보유는 항상 비공개" value={delayedPublic} onValueChange={(value) => { void changeDelayedPublic(value); }} disabled={!profilePublic || savingProfile} />
+        <ToggleRow title="사용자 랭킹 프로필 공개" body="실제 매매 수익률과 매도 횟수를 공개합니다. 전략은 전략 상세에서 별도로 공개해야 합니다." value={profilePublic} onValueChange={(value) => { void changeProfilePublic(value); }} disabled={savingProfile} />
       </Surface>
-      {!profilePublic ? <Banner title="현재 공개 동의 없음" body="내 공식 랭킹 기록은 내부 원장에 보존되지만 공개 화면에는 나타나지 않습니다." /> : null}
+      {!profilePublic
+        ? <Banner title="현재 공개 동의 없음" body="내 매매 기록은 보존되지만 사용자 랭킹에는 나타나지 않습니다." />
+        : <Banner tone="accent" title="사용자 랭킹 공개 중" body="공개 전략 목록에는 내 전략 상세에서 '공개로 전환'한 전략만 표시됩니다." />}
 
       <SectionTitle title="알림" />
       <Surface style={{ gap: spacing.sm }}><ToggleRow title="신호 알림" body="기기 권한을 확인합니다. 실제 원격 푸시 자격증명은 연결되지 않음" value={notifications} onValueChange={(value) => { void changeNotifications(value); }} disabled={savingAlerts} /><Divider /><ToggleRow title="방해 금지 시간" body="22:00~07:00 · 앱 기록은 계속 저장" value={quietHours} onValueChange={(value) => { void changeQuietHours(value); }} disabled={savingAlerts} /><Button label="민감 정보 없는 로컬 알림 테스트" kind="secondary" compact onPress={() => { void testNotification(); }} disabled={!notifications || savingAlerts} /></Surface>
       {!notifications ? <Banner tone="negative" title="알림 권한이 꺼져 있어요" body="신호 기록은 앱 안에 남지만 잠금 화면 알림은 받지 못합니다." /> : null}
 
       <SectionTitle title="데이터 · 개인정보" />
-      <Surface style={{ paddingVertical: 0 }}><ListRow title="데이터 공급자 상태" subtitle="실제 수집 상태 확인" onPress={() => router.push('/provider-status')} /><Divider /><ListRow title="공개 데이터 범위" subtitle="실제 투자금·이메일·토큰 비공개" onPress={() => router.navigate('/(tabs)/rankings')} /><Divider /><ListRow title="개인정보 처리 · 고지" subtitle="정보·교육 목적 · 투자자문 아님" onPress={() => Alert.alert('필수 고지', '백테스트와 페이퍼 성과는 미래 성과를 보장하지 않습니다. 비용, 데이터 지연, 시장 상황으로 실제 결과가 달라질 수 있습니다.')} /></Surface>
+      <Surface style={{ paddingVertical: 0 }}><ListRow title="데이터 공급자 상태" subtitle="실제 수집 상태 확인" onPress={() => router.push('/provider-status')} /><Divider /><ListRow title="공개 데이터 범위" subtitle="수익률·매도 횟수 외 투자금·이메일·토큰 비공개" onPress={() => router.navigate('/(tabs)/rankings')} /><Divider /><ListRow title="개인정보 처리 · 고지" subtitle="정보·교육 목적 · 투자자문 아님" onPress={() => Alert.alert('필수 고지', '사용자 랭킹은 직접 작성한 매매 기록이며 증권사 인증 내역이 아닙니다. 백테스트와 기록 수익률은 미래 성과를 보장하지 않습니다.')} /></Surface>
 
       <SectionTitle title="계정" />
       {auth.session

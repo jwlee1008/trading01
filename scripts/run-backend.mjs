@@ -22,7 +22,6 @@ const workerActions = {
   bootRun: [":signal-worker:bootRun"],
   once: [":signal-worker:bootRun"],
   check: [":signal-worker:test", ":signal-worker:build", "--no-daemon"],
-  benchmark: [":signal-worker:rankingBenchmark"],
   importCalendar: [":signal-worker:bootRun"],
   importInstruments: [":signal-worker:bootRun"],
   refreshKospiTop10: [":signal-worker:bootRun"],
@@ -50,10 +49,10 @@ if (moduleName === "api") {
   if (marketActions[action]) env.MARKET_DATA_ACTION = marketActions[action];
 }
 
-const executable = process.platform === "win32" ? "gradlew.bat" : "sh";
+const executable = process.platform === "win32" ? join(backend, "gradlew.bat") : "sh";
 const executableArgs = process.platform === "win32" ? args : ["./gradlew", ...args];
 const child = spawn(executable, executableArgs, {
-  cwd: backend, env, stdio: "inherit", shell: false,
+  cwd: backend, env, stdio: "inherit", shell: process.platform === "win32",
   detached: process.platform !== "win32",
 });
 let stopping = false;

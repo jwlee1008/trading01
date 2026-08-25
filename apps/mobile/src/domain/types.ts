@@ -1,8 +1,7 @@
-export type UniverseId = 'kospi200' | 'kosdaq150' | 'kospiTop10' | 'kospi' | 'kosdaq' | 'all' | 'custom';
+export type UniverseId = 'kospi200' | 'kosdaq150' | 'kospiTop10' | 'demoTop30' | 'kospi' | 'kosdaq' | 'all' | 'custom';
 export type IndicatorId = 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'volume' | 'stochastic' | 'atr' | 'adx' | 'obv';
-export type PortfolioKind = 'MANUAL_LIVE' | 'SANDBOX_PAPER' | 'RANKED_PAPER';
+export type PortfolioKind = 'MANUAL_LIVE';
 export type PositionStatus = 'OPEN' | 'EXIT_PENDING' | 'PARTIALLY_CLOSED' | 'CLOSED' | 'ARCHIVED';
-export type OrderStatus = 'PENDING' | 'FILLED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED';
 
 export interface Universe {
   id: UniverseId;
@@ -96,30 +95,15 @@ export interface Position {
   quantity: number;
   averagePrice: number;
   currentPrice: number;
+  marketPriceAvailable?: boolean;
   status: PositionStatus;
   firstBoughtAt: string;
   highestClose: number;
   signalId: string | null;
   strategyVersion: number | null;
   executions: Execution[];
+  realizedProfit?: number;
   sellRule: SellRule | null;
-}
-
-export interface PaperOrder {
-  id: string;
-  kind: 'SANDBOX_PAPER' | 'RANKED_PAPER';
-  side: 'BUY' | 'SELL';
-  symbol: string;
-  instrumentName: string;
-  quantity: number;
-  estimatedPrice: number;
-  status: OrderStatus;
-  createdAt: string;
-  scheduledSession: string;
-  reservedAmount: number;
-  signalId: string | null;
-  positionId: string | null;
-  rejectReason: string | null;
 }
 
 export interface AppAlert {
@@ -134,21 +118,6 @@ export interface AppAlert {
   delayed: boolean;
 }
 
-export interface CombinationRank {
-  id: string;
-  rank: number;
-  name: string;
-  indicatorIds: IndicatorId[];
-  universeId: UniverseId;
-  excessReturn: Record<'3m' | '6m' | '1y', number>;
-  hitRate: number;
-  mdd: number;
-  signalCount: number;
-  instrumentCount: number;
-  stability: number;
-  confidence: string;
-}
-
 export interface UserRank {
   id: string;
   rank: number;
@@ -160,4 +129,15 @@ export interface UserRank {
   days: number;
   strategyName: string;
   public: boolean;
+  strategies: PublicStrategySummary[];
+}
+
+export interface PublicStrategySummary {
+  id: string;
+  strategyId: string;
+  name: string;
+  version: number;
+  universeId: UniverseId;
+  indicatorIds: IndicatorId[];
+  conditionMode: 'ALL' | 'ANY';
 }

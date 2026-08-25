@@ -2,8 +2,6 @@ import { z } from "zod";
 
 export const portfolioKindSchema = z.enum([
   "MANUAL_LIVE",
-  "SANDBOX_PAPER",
-  "RANKED_PAPER",
 ]);
 
 export const rankingPeriodSchema = z.enum(["3M", "6M", "1Y", "ALL"]);
@@ -143,20 +141,6 @@ export const manualExecutionSchema = z.object({
   }
 });
 
-export const paperOrderSchema = z.object({
-  portfolioId: z.string().min(1),
-  symbol: z.string().regex(/^\d{6}$/),
-  side: z.enum(["BUY", "SELL"]),
-  positionId: z.string().min(1).nullable().default(null),
-  quantity: z.number().int().positive().max(1_000_000_000),
-  signalId: z.string().nullable().default(null),
-  idempotencyKey: z.string().min(8).max(100),
-}).superRefine((input, context) => {
-  if (input.side === "SELL" && input.positionId === null) {
-    context.addIssue({ code: "custom", path: ["positionId"], message: "매도 포지션 ID가 필요합니다." });
-  }
-});
-
 export const profileVisibilitySchema = z.object({
   isPublic: z.boolean(),
   nickname: z.string().trim().min(2).max(20),
@@ -198,7 +182,6 @@ export type StrategyEvaluationInput = z.output<typeof strategyEvaluationSchema>;
 export type CreateStrategyInput = z.infer<typeof createStrategySchema>;
 export type SellRuleInput = z.infer<typeof sellRuleSchema>;
 export type ManualExecutionInput = z.infer<typeof manualExecutionSchema>;
-export type PaperOrderInput = z.infer<typeof paperOrderSchema>;
 export type ProfileVisibilityInput = z.infer<typeof profileVisibilitySchema>;
 export type AlertSettingsInput = z.infer<typeof alertSettingsSchema>;
 export type SignalAdvice = z.infer<typeof signalAdviceSchema>;

@@ -1,6 +1,8 @@
 package com.signallab.api.domain.portfolio.dto;
 
+import com.signallab.api.domain.execution.dto.ExecutionResponse;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record PositionResponse(
@@ -12,9 +14,11 @@ public record PositionResponse(
     long quantity,
     String averagePrice,
     String currentPrice,
+    boolean marketPriceAvailable,
     String highestClose,
     OffsetDateTime openedAt,
     String realizedPnl,
     UUID linkedSignalId,
-    UUID sellRuleVersionId
+    UUID sellRuleVersionId,
+    List<ExecutionResponse> executions
 ) {}

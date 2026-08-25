@@ -14,6 +14,7 @@ public record ExecutionResponse(
     String fee,
     String tax,
     OffsetDateTime executedAt,
+    String memo,
     UUID signalId,
     String idempotencyKey,
     UUID correctionOf

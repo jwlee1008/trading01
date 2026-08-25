@@ -33,14 +33,6 @@ public class SellRuleService {
         if ("CLOSED".equals(position.status()) || "ARCHIVED".equals(position.status())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "종료 포지션에는 규칙을 적용할 수 없습니다.");
         }
-        if ("RANKED_PAPER".equals(position.portfolioKind())) {
-            if (input.manualOnly()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "공식 랭킹은 자동 매도 규칙이 하나 이상 필요합니다.");
-            }
-            if (position.sellRuleVersionId() != null) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "공식 랭킹 규칙은 트랙 시작 뒤 바꿀 수 없습니다.");
-            }
-        }
 
         UUID setId = jdbcTemplate.queryForObject(
             """

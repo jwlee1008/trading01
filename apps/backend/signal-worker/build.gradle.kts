@@ -21,9 +21,3 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     workingDir = rootProject.projectDir.parentFile.parentFile
 }
-
-tasks.register<JavaExec>("rankingBenchmark") {
-    group = "verification"
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("com.signallab.worker.RankingBenchmark")
-}
